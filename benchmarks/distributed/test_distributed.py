@@ -9,10 +9,10 @@ from time import sleep, perf_counter
 from tqdm import tqdm, trange
 
 TEST_NUM_NODES = 65
-MAX_ACTORS_IN_CLUSTER = 10000
 MAX_RUNNING_TASKS_IN_CLUSTER = 10000
 MAX_PLACEMENT_GROUPS = 1000
-MAX_NUM_NODES = 250
+MAX_ACTORS_IN_CLUSTER = 50000
+MAX_NUM_NODES = 1000
 
 
 def num_alive_nodes():
@@ -153,17 +153,6 @@ assert available_resources == cluster_resources, (
     str(available_resources) + " != " + str(cluster_resources))
 print("Done launching nodes")
 
-actor_start = perf_counter()
-test_max_actors()
-actor_end = perf_counter()
-
-sleep(1)
-assert num_alive_nodes(
-) == TEST_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
-assert available_resources == cluster_resources, (
-    str(available_resources) + " != " + str(cluster_resources))
-print("Done testing actors")
-
 task_start = perf_counter()
 test_max_running_tasks()
 task_end = perf_counter()
@@ -193,6 +182,15 @@ launch_end = perf_counter()
 sleep(1)
 assert num_alive_nodes(
 ) == MAX_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+
+actor_start = perf_counter()
+test_max_actors()
+actor_end = perf_counter()
+
+sleep(1)
+assert num_alive_nodes(
+) == MAX_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+print("Done testing actors")
 print("Done.")
 
 actor_time = actor_end - actor_start
