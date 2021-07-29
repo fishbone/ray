@@ -144,7 +144,7 @@ ray.init(address="auto")
 
 scale_to(TEST_NUM_NODES)
 assert num_alive_nodes(
-) == TEST_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+) == TEST_NUM_NODES, f"Wrong number of nodes in cluster {len(ray.nodes())}"
 
 cluster_resources = ray.cluster_resources()
 
@@ -159,7 +159,7 @@ task_end = perf_counter()
 
 sleep(1)
 assert num_alive_nodes(
-) == TEST_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+) == TEST_NUM_NODES, f"Wrong number of nodes in cluster {len(ray.nodes())}"
 assert available_resources == cluster_resources, (
     str(available_resources) + " != " + str(cluster_resources))
 print("Done testing tasks")
@@ -170,7 +170,7 @@ pg_end = perf_counter()
 
 sleep(1)
 assert num_alive_nodes(
-) == TEST_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+) == TEST_NUM_NODES, f"Wrong number of nodes in cluster {len(ray.nodes())}"
 assert available_resources == cluster_resources, (
     str(available_resources) + " != " + str(cluster_resources))
 print("Done testing placement groups")
@@ -181,7 +181,7 @@ launch_end = perf_counter()
 
 sleep(1)
 assert num_alive_nodes(
-) == MAX_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+) == MAX_NUM_NODES, f"Wrong number of nodes in cluster {len(ray.nodes())}"
 
 actor_start = perf_counter()
 test_max_actors()
@@ -189,7 +189,7 @@ actor_end = perf_counter()
 
 sleep(1)
 assert num_alive_nodes(
-) == MAX_NUM_NODES, "Wrong number of nodes in cluster " + len(ray.nodes())
+) == MAX_NUM_NODES, f"Wrong number of nodes in cluster {len(ray.nodes())}"
 print("Done testing actors")
 print("Done.")
 
