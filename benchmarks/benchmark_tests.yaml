@@ -36,6 +36,6 @@
     compute_template: distributed.yaml
 
   run:
-    timeout: 3600 # 1hr
+    timeout: 7200 # 2hr
     prepare: sleep 0
     script: python distributed/test_distributed.py
