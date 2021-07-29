@@ -1,7 +1,5 @@
 import ray
 import ray.autoscaler.sdk
-from ray.test_utils import Semaphore
-from ray.util.placement_group import placement_group, remove_placement_group
 
 import json
 import os
@@ -10,6 +8,7 @@ from tqdm import tqdm, trange
 
 TEST_NUM_NODES = 1000
 MAX_ACTORS_IN_CLUSTER = 20000
+
 
 def num_alive_nodes():
     n = 0
