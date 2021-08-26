@@ -1,5 +1,6 @@
 import logging
 import urllib.parse as parse
+import functools
 from ray.experimental.workflow.storage.base import Storage
 from ray.experimental.workflow.storage.base import (
     DataLoadError, DataSaveError, KeyNotFoundError)
@@ -66,6 +67,14 @@ def get_global_storage() -> Storage:
 def set_global_storage(storage: Storage) -> None:
     global _global_storage
     _global_storage = storage
+
+
+def assert_initialized():
+    from ray import is_initialized
+    if not is_initialized():
+        raise RuntimeError(
+            "Please connect to ray cluster by calling `ray.init`")
+    get_global_storage()
 
 
 __all__ = ("Storage", "get_global_storage", "create_storage",

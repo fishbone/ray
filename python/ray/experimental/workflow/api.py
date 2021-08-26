@@ -21,18 +21,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _assert_initialized(func):
-    @functools.wraps(func)
-    def wrapper(*args, **argv):
-        if not ray.is_initialized():
-            raise RuntimeError(
-                "Please connect to ray cluster by calling `ray.init`")
-        if storage_base.get_global_storage() is None:
-            raise RuntimeError(
-                "Please initialize workflow by calling `workflow.init`")
-        return func(*args, **argv)
-
-
 def init(storage: "Optional[Union[str, Storage]]" = None) -> None:
     """Initialize workflow.
 
@@ -156,7 +144,6 @@ class _VirtualActorDecorator:
 virtual_actor = _VirtualActorDecorator()
 
 
-@_assert_initialized
 def get_actor(actor_id: str) -> "VirtualActor":
     """Get an virtual actor.
 
@@ -166,11 +153,11 @@ def get_actor(actor_id: str) -> "VirtualActor":
     Returns:
         A virtual actor.
     """
+    storage_base.assert_initialized()
     return virtual_actor_class.get_actor(actor_id,
                                          storage_base.get_global_storage())
 
 
-@_assert_initialized
 def resume(workflow_id: str) -> ray.ObjectRef:
     """Resume a workflow.
 
@@ -190,10 +177,10 @@ def resume(workflow_id: str) -> ray.ObjectRef:
     Returns:
         An object reference that can be used to retrieve the workflow result.
     """
+    storage_base.assert_initialized()
     return execution.resume(workflow_id)
 
 
-@_assert_initialized
 def get_output(workflow_id: str, *,
                name: Optional[str] = None) -> ray.ObjectRef:
     """Get the output of a running workflow.
@@ -215,10 +202,10 @@ def get_output(workflow_id: str, *,
     Returns:
         An object reference that can be used to retrieve the workflow result.
     """
+    storage_base.assert_initialized()
     return execution.get_output(workflow_id, name)
 
 
-@_assert_initialized
 def list_all(status_filter: Optional[Union[Union[WorkflowStatus, str], Set[
         Union[WorkflowStatus, str]]]] = None
              ) -> List[Tuple[str, WorkflowStatus]]:
@@ -243,6 +230,7 @@ def list_all(status_filter: Optional[Union[Union[WorkflowStatus, str], Set[
     Returns:
         A list of tuple with workflow id and workflow status
     """
+    storage_base.assert_initialized()
     if isinstance(status_filter, str):
         status_filter = set({WorkflowStatus(status_filter)})
     elif isinstance(status_filter, WorkflowStatus):
@@ -262,7 +250,6 @@ def list_all(status_filter: Optional[Union[Union[WorkflowStatus, str], Set[
     return execution.list_all(status_filter)
 
 
-@_assert_initialized
 def resume_all(include_failed: bool = False) -> Dict[str, ray.ObjectRef]:
     """Resume all resumable workflow jobs.
 
@@ -287,10 +274,10 @@ def resume_all(include_failed: bool = False) -> Dict[str, ray.ObjectRef]:
     Returns:
         Workflow resumed. It'll be a list of (workflow_id, returned_obj_ref).
     """
+    storage_base.assert_initialized()
     return execution.resume_all(include_failed)
 
 
-@_assert_initialized
 def get_status(workflow_id: str) -> WorkflowStatus:
     """Get the status for a given workflow.
 
@@ -305,12 +292,12 @@ def get_status(workflow_id: str) -> WorkflowStatus:
     Returns:
         The status of that workflow
     """
+    storage_base.assert_initialized()
     if not isinstance(workflow_id, str):
         raise TypeError("workflow_id has to be a string type.")
     return execution.get_status(workflow_id)
 
 
-@_assert_initialized
 def cancel(workflow_id: str) -> None:
     """Cancel a workflow.
 
@@ -326,6 +313,7 @@ def cancel(workflow_id: str) -> None:
     Returns:
         None
     """
+    storage_base.assert_initialized()
     if not isinstance(workflow_id, str):
         raise TypeError("workflow_id has to be a string type.")
     return execution.cancel(workflow_id)
