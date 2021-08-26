@@ -25,9 +25,11 @@ def _assert_initialized(func):
     @functools.wraps(func)
     def wrapper(*args, **argv):
         if not ray.is_initialized():
-            raise RuntimeError("Please connect to ray cluster by calling `ray.init`")
+            raise RuntimeError(
+                "Please connect to ray cluster by calling `ray.init`")
         if storage_base.get_global_storage() is None:
-            raise RuntimeError("Please initialize workflow by calling `workflow.init`")
+            raise RuntimeError(
+                "Please initialize workflow by calling `workflow.init`")
         return func(*args, **argv)
 
 
@@ -152,6 +154,7 @@ class _VirtualActorDecorator:
 
 
 virtual_actor = _VirtualActorDecorator()
+
 
 @_assert_initialized
 def get_actor(actor_id: str) -> "VirtualActor":
