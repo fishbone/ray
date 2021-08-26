@@ -1,6 +1,7 @@
 import logging
 import os
 import types
+import functools
 from typing import Dict, Set, List, Tuple, Union, Optional, Any, TYPE_CHECKING
 
 import ray
@@ -18,6 +19,16 @@ if TYPE_CHECKING:
         VirtualActorClass, VirtualActor)
 
 logger = logging.getLogger(__name__)
+
+
+def _assert_initialized(func):
+    @functools.wraps(func)
+    def wrapper(*args, **argv):
+        if not ray.is_initialized():
+            raise RuntimeError("Please connect to ray cluster by calling `ray.init`")
+        if storage_base.get_global_storage() is None:
+            raise RuntimeError("Please initialize workflow by calling `workflow.init`")
+        return func(*args, **argv)
 
 
 def init(storage: "Optional[Union[str, Storage]]" = None) -> None:
@@ -142,7 +153,7 @@ class _VirtualActorDecorator:
 
 virtual_actor = _VirtualActorDecorator()
 
-
+@_assert_initialized
 def get_actor(actor_id: str) -> "VirtualActor":
     """Get an virtual actor.
 
@@ -156,6 +167,7 @@ def get_actor(actor_id: str) -> "VirtualActor":
                                          storage_base.get_global_storage())
 
 
+@_assert_initialized
 def resume(workflow_id: str) -> ray.ObjectRef:
     """Resume a workflow.
 
@@ -178,6 +190,7 @@ def resume(workflow_id: str) -> ray.ObjectRef:
     return execution.resume(workflow_id)
 
 
+@_assert_initialized
 def get_output(workflow_id: str, *,
                name: Optional[str] = None) -> ray.ObjectRef:
     """Get the output of a running workflow.
@@ -202,6 +215,7 @@ def get_output(workflow_id: str, *,
     return execution.get_output(workflow_id, name)
 
 
+@_assert_initialized
 def list_all(status_filter: Optional[Union[Union[WorkflowStatus, str], Set[
         Union[WorkflowStatus, str]]]] = None
              ) -> List[Tuple[str, WorkflowStatus]]:
@@ -245,6 +259,7 @@ def list_all(status_filter: Optional[Union[Union[WorkflowStatus, str], Set[
     return execution.list_all(status_filter)
 
 
+@_assert_initialized
 def resume_all(include_failed: bool = False) -> Dict[str, ray.ObjectRef]:
     """Resume all resumable workflow jobs.
 
@@ -272,6 +287,7 @@ def resume_all(include_failed: bool = False) -> Dict[str, ray.ObjectRef]:
     return execution.resume_all(include_failed)
 
 
+@_assert_initialized
 def get_status(workflow_id: str) -> WorkflowStatus:
     """Get the status for a given workflow.
 
@@ -291,6 +307,7 @@ def get_status(workflow_id: str) -> WorkflowStatus:
     return execution.get_status(workflow_id)
 
 
+@_assert_initialized
 def cancel(workflow_id: str) -> None:
     """Cancel a workflow.
 
