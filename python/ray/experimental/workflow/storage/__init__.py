@@ -1,6 +1,5 @@
 import logging
 import urllib.parse as parse
-import functools
 from ray.experimental.workflow.storage.base import Storage
 from ray.experimental.workflow.storage.base import (
     DataLoadError, DataSaveError, KeyNotFoundError)
