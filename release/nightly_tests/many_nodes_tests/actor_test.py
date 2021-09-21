@@ -6,7 +6,7 @@ import ray
 
 
 def test_max_actors_launch(cpus_per_actor, total_actors):
-    @ray.remote(num_cpus=cpus_per_actor)
+    @ray.remote(num_cpus=cpus_per_actor, max_restarts=10)
     class Actor:
         def foo(self):
             pass
