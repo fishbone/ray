@@ -344,8 +344,8 @@
     compute_template: many_nodes_tests/compute_config.yaml
 
   run:
-    timeout: 7200
-    prepare: python wait_cluster.py 251 5400
+    timeout: 3000 # 40mins for cluster to be up + 10mins for running task
+    prepare: python wait_cluster.py 251 2400
     script: python many_nodes_tests/actor_test.py
 
 - name: pg_autoscaling_regression_test
