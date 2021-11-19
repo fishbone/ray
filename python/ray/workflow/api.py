@@ -168,18 +168,32 @@ virtual_actor = _VirtualActorDecorator()
 
 
 @PublicAPI(stability="beta")
-def get_actor(actor_id: str) -> "VirtualActor":
+def get_actor(actor_id: str,
+              from_actor_id: Optional[str]=None) -> "VirtualActor":
     """Get an virtual actor.
 
     Args:
         actor_id: The ID of the actor.
+        from_actor_id: If the `actor_id` doesn't exist, it'll try to create
+            from `from_actor_id`. The created virtual actor will have the same
+            data and type as `from_actor_id` .
 
     Returns:
         A virtual actor.
     """
     ensure_ray_initialized()
-    return virtual_actor_class.get_actor(actor_id,
-                                         storage_base.get_global_storage())
+    try:
+        return virtual_actor_class.get_actor(
+            actor_id,
+            storage_base.get_global_storage())
+    except ray.workflow.storage.base.KeyNotFoundError:
+        if from_actor_id is not None:
+            return virtual_actor_class.copy_actor(
+                from_actor_id,
+                actor_id,
+                storage_base.get_global_storage())
+        else:
+            raise
 
 
 @PublicAPI(stability="beta")

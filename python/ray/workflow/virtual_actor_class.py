@@ -16,7 +16,7 @@ from ray.workflow.common import (slugify, WorkflowData, Workflow, WorkflowRef,
 from ray.workflow import serialization_context
 from ray.workflow.storage import Storage, get_global_storage
 from ray.workflow.workflow_storage import WorkflowStorage
-from ray.workflow.recovery import get_latest_output
+from ray.workflow.recovery import get_latest_output, get_latest_step_id
 from ray.workflow.workflow_access import (get_or_create_management_actor)
 from ray.workflow import workflow_context
 from ray.workflow.step_executor import execute_workflow
@@ -538,6 +538,10 @@ def decorate_actor(cls: type):
     """Decorate and convert a class to virtual actor class."""
     return VirtualActorClass._from_class(cls)
 
+
+def copy_actor(from_actor_id: str, actor_id: str, storage: Storage) -> VirtualActor:
+    latest_step_id = get_latest_step_id(from_actor_id, storage)
+    # duplicate workflow with id
 
 def get_actor(actor_id: str, storage: Storage) -> VirtualActor:
     """Get an virtual actor.

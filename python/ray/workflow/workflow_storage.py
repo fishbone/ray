@@ -352,6 +352,10 @@ class WorkflowStorage:
         data = await obj_ref
         await self._put(self._key_obj_id(identifier), data)
 
+
+    def duplicate_actor():
+        pass
+
     def load_actor_class_body(self) -> type:
         """Load the class body of the virtual actor.
 
