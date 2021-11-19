@@ -352,7 +352,6 @@ class WorkflowStorage:
         data = await obj_ref
         await self._put(self._key_obj_id(identifier), data)
 
-
     def duplicate_actor():
         pass
 

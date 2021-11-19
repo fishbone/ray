@@ -539,9 +539,11 @@ def decorate_actor(cls: type):
     return VirtualActorClass._from_class(cls)
 
 
-def copy_actor(from_actor_id: str, actor_id: str, storage: Storage) -> VirtualActor:
+def copy_actor(from_actor_id: str, actor_id: str,
+               storage: Storage) -> VirtualActor:
     latest_step_id = get_latest_step_id(from_actor_id, storage)
     # duplicate workflow with id
+
 
 def get_actor(actor_id: str, storage: Storage) -> VirtualActor:
     """Get an virtual actor.

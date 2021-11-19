@@ -181,8 +181,7 @@ def get_latest_step_id(workflow_id: str, store: storage.Storage) -> Any:
         if isinstance(result.output_step_id, str):
             step_id = result.output_step_id
         else:
-            raise ValueError(
-                "Workflow output does not exists or not valid.")
+            raise ValueError("Workflow output does not exists or not valid.")
 
 
 def get_latest_output(workflow_id: str, store: storage.Storage) -> Any:
