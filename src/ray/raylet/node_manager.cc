@@ -342,6 +342,7 @@ NodeManager::NodeManager(instrumented_io_context &io_service, const NodeID &self
              failed_nodes_cache_.count(owner_node_id) > 0);
   };
   cluster_task_manager_ = std::make_shared<ClusterTaskManager>(
+      io_service_,
       self_node_id_,
       std::dynamic_pointer_cast<ClusterResourceScheduler>(cluster_resource_scheduler_),
       dependency_manager_, is_owner_alive, get_node_info_func, announce_infeasible_task,

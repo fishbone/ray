@@ -17,6 +17,8 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "ray/common/ray_object.h"
+#include "ray/raylet_client/raylet_client.h"
+
 #include "ray/common/task/task.h"
 #include "ray/common/task/task_common.h"
 #include "ray/raylet/dependency_manager.h"
@@ -144,6 +146,7 @@ class ClusterTaskManager : public ClusterTaskManagerInterface {
   ///                                   scheduling class. If set to 0, there is no
   ///                                   cap. If it's a large number, the cap is hard.
   ClusterTaskManager(
+      instrumented_io_context &io_service,
       const NodeID &self_node_id,
       std::shared_ptr<ClusterResourceScheduler> cluster_resource_scheduler,
       TaskDependencyManagerInterface &task_dependency_manager,
@@ -270,6 +273,38 @@ class ClusterTaskManager : public ClusterTaskManagerInterface {
 
   /// Calculate normal task resources.
   ResourceSet CalcNormalTaskResources() const override;
+
+  /// Shared client call manager.
+  std::unique_ptr<rpc::ClientCallManager> client_call_manager_;
+
+  std::shared_ptr<WorkerLeaseInterface> LeaseFN(const std::string &ip_address,
+                                                int port) {
+    auto grpc_client =
+        rpc::NodeManagerWorkerClient::make(ip_address, port, *client_call_manager_);
+    return std::shared_ptr<raylet::RayletClient>(
+        new raylet::RayletClient(std::move(grpc_client)));
+  }
+
+  std::shared_ptr<WorkerLeaseInterface>
+  GetOrConnectLeaseClient(
+      const rpc::Address *raylet_address) {
+    std::shared_ptr<WorkerLeaseInterface> lease_client;
+    RAY_CHECK(raylet_address != nullptr);
+    // A remote raylet was specified. Connect to the raylet if needed.
+    NodeID raylet_id = NodeID::FromBinary(raylet_address->raylet_id());
+    auto it = remote_lease_clients_.find(raylet_id);
+    if (it == remote_lease_clients_.end()) {
+      RAY_LOG(INFO) << "Connecting to raylet " << raylet_id;
+      it = remote_lease_clients_
+           .emplace(raylet_id, LeaseFN(raylet_address->ip_address(),
+                                       raylet_address->port()))
+           .first;
+    }
+    lease_client = it->second;
+    return lease_client;
+  }
+  absl::flat_hash_map<NodeID, std::shared_ptr<WorkerLeaseInterface>> remote_lease_clients_;
+
 
  private:
   struct SchedulingClassInfo;

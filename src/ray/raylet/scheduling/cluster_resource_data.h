@@ -169,6 +169,9 @@ class NodeResources {
   /// Returns if this equals another node resources.
   bool operator==(const NodeResources &other);
   bool operator!=(const NodeResources &other);
+  NodeResources& operator-=(const NodeResources &other);
+  NodeResources& operator+=(const NodeResources &other);
+
   /// Returns human-readable string for these resources.
   std::string DebugString(StringIdMap string_to_int_map) const;
   /// Returns compact dict-like string.
@@ -193,8 +196,14 @@ class NodeResourceInstances {
 };
 
 struct Node {
-  Node(const NodeResources &resources)
+  explicit Node(const NodeResources &resources)
       : last_reported_(resources), local_view_(resources) {}
+
+  Node(const NodeResources &resources, const Node& n)
+      : last_reported_(resources), local_view_(resources) {
+    local_view_ -= n.last_reported_;
+    local_view_ += n.local_view_;
+  }
 
   NodeResources *GetMutableLocalView() { return &local_view_; }
 
@@ -214,6 +223,7 @@ struct Node {
   /// make sure that our local view does not skew too much from the actual
   /// resources when light heartbeats are enabled.
   NodeResources local_view_;
+
 };
 
 /// \request Conversion result to a ResourceRequest data structure.

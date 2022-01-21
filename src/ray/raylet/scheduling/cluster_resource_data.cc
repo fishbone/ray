@@ -315,6 +315,41 @@ bool NodeResources::operator==(const NodeResources &other) {
   return true;
 }
 
+NodeResources& NodeResources::operator-=(const NodeResources &other) {
+  for (size_t i = 0; i < PredefinedResources_MAX; i++) {
+    predefined_resources[i].available -= other.predefined_resources[i].available;
+  }
+
+  for (auto it1 = this->custom_resources.begin(); it1 != this->custom_resources.end();
+       ++it1) {
+    auto it2 = other.custom_resources.find(it1->first);
+    if (it2 == other.custom_resources.end()) {
+      continue;
+    }
+
+    it1->second.available -= it2->second.available;
+  }
+  return *this;
+}
+
+NodeResources& NodeResources::operator+=(const NodeResources &other) {
+  for (size_t i = 0; i < PredefinedResources_MAX; i++) {
+    predefined_resources[i].available += other.predefined_resources[i].available;
+  }
+
+  for (auto it1 = this->custom_resources.begin(); it1 != this->custom_resources.end();
+       ++it1) {
+    auto it2 = other.custom_resources.find(it1->first);
+    if (it2 == other.custom_resources.end()) {
+      continue;
+    }
+
+    it1->second.available += it2->second.available;
+  }
+  return *this;
+}
+
+
 bool NodeResources::operator!=(const NodeResources &other) { return !(*this == other); }
 
 std::string NodeResources::DebugString(StringIdMap string_to_in_map) const {

@@ -28,6 +28,7 @@ namespace raylet {
 const int kMaxPendingActorsToReport = 20;
 
 ClusterTaskManager::ClusterTaskManager(
+    instrumented_io_context &io_service,
     const NodeID &self_node_id,
     std::shared_ptr<ClusterResourceScheduler> cluster_resource_scheduler,
     TaskDependencyManagerInterface &task_dependency_manager,
@@ -56,7 +57,9 @@ ClusterTaskManager::ClusterTaskManager(
       get_time_ms_(get_time_ms),
       sched_cls_cap_enabled_(RayConfig::instance().worker_cap_enabled()),
       sched_cls_cap_interval_ms_(sched_cls_cap_interval_ms),
-      sched_cls_cap_max_ms_(RayConfig::instance().worker_cap_max_backoff_delay_ms()) {}
+      sched_cls_cap_max_ms_(RayConfig::instance().worker_cap_max_backoff_delay_ms()) {
+  client_call_manager_  = std::make_unique<rpc::ClientCallManager>(io_service);;
+}
 
 bool ClusterTaskManager::SchedulePendingTasks() {
   // Always try to schedule infeasible tasks in case they are now feasible.

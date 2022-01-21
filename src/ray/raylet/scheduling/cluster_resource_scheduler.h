@@ -338,6 +338,9 @@ class ClusterResourceScheduler : public ClusterResourceSchedulerInterface {
   bool AllocateRemoteTaskResources(
       const std::string &node_id,
       const absl::flat_hash_map<std::string, double> &task_resources);
+  bool ReleaseRemoteTaskResources(
+      const std::string &node_id,
+      const absl::flat_hash_map<std::string, double> &task_resources);
 
   void ReleaseWorkerResources(std::shared_ptr<TaskResourceInstances> task_allocation);
 
@@ -412,7 +415,8 @@ class ClusterResourceScheduler : public ClusterResourceSchedulerInterface {
   /// \return true, if resource_request can be indeed scheduled on the node,
   /// and false otherwise.
   bool SubtractRemoteNodeAvailableResources(int64_t node_id,
-                                            const ResourceRequest &resource_request);
+                                            const ResourceRequest &resource_request,
+                                            bool release = false);
 
   /// List of nodes in the clusters and their resources organized as a map.
   /// The key of the map is the node ID.
