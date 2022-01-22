@@ -485,15 +485,7 @@ void ClusterTaskManager::QueueAndScheduleTask(
   auto work = std::make_shared<internal::Work>(
       task, grant_or_reject, reply,
       [send_reply_callback] { send_reply_callback(Status::OK(), nullptr, nullptr); });
-  const auto &scheduling_class = task.GetTaskSpecification().GetSchedulingClass();
-  // If the scheduling class is infeasible, just add the work to the infeasible queue
-  // directly.
-  if (infeasible_tasks_.count(scheduling_class) > 0) {
-    infeasible_tasks_[scheduling_class].push_back(work);
-  } else {
-    tasks_to_schedule_[scheduling_class].push_back(work);
-  }
-  ScheduleAndDispatchTasks();
+  DoQueueAndScheduleTask(work);
 }
 
 void ClusterTaskManager::TasksUnblocked(const std::vector<TaskID> &ready_ids) {
@@ -1279,6 +1271,7 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to,
   internal_stats_.metric_tasks_spilled++;
   const auto &task = work->task;
   const auto &task_spec = task.GetTaskSpecification();
+
   RAY_LOG(DEBUG) << "Spilling task " << task_spec.TaskId() << " to node " << spillback_to;
 
   if (!cluster_resource_scheduler_->AllocateRemoteTaskResources(
@@ -1291,13 +1284,26 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to,
   RAY_CHECK(node_info_ptr)
       << "Spilling back to a node manager, but no GCS info found for node "
       << spillback_to;
-  auto reply = work->reply;
-  reply->mutable_retry_at_raylet_address()->set_ip_address(
-      node_info_ptr->node_manager_address());
-  reply->mutable_retry_at_raylet_address()->set_port(node_info_ptr->node_manager_port());
-  reply->mutable_retry_at_raylet_address()->set_raylet_id(spillback_to.Binary());
+  rpc::Address addr;
+  addr.set_ip_address(node_info_ptr->node_manager_address());
+  addr.set_port(node_info_ptr->node_manager_port());
+  addr.set_raylet_id(spillback_to.Binary());
 
-  send_reply_callback();
+  auto lease_client = GetOrConnectLeaseClient(&addr);
+  lease_client->RequestWorkerLease(
+      task_spec,
+      true,
+      [this, work, spillback_to] (const Status &status, const rpc::RequestWorkerLeaseReply &reply) {
+        cluster_resource_scheduler_->ReleaseRemoteTaskResources(
+            spillback_to.Binary(), work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
+        if(!status.ok() || reply.canceled() || reply.rejected() || reply.runtime_env_setup_failed()) {
+          DoQueueAndScheduleTask(work);
+          return;
+        }
+        RAY_CHECK(!reply.worker_address().raylet_id().empty());
+        *work->reply = reply;
+        work->callback();
+      });
 }
 
 void ClusterTaskManager::ClearWorkerBacklog(const WorkerID &worker_id) {

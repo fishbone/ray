@@ -307,6 +307,19 @@ class ClusterTaskManager : public ClusterTaskManagerInterface {
 
 
  private:
+  void DoQueueAndScheduleTask(std::shared_ptr<internal::Work> work) {
+    const auto &scheduling_class = work->task.GetTaskSpecification().GetSchedulingClass();
+    // If the scheduling class is infeasible, just add the work to the infeasible queue
+    // directly.
+    if (infeasible_tasks_.count(scheduling_class) > 0) {
+      infeasible_tasks_[scheduling_class].push_back(work);
+    } else {
+      tasks_to_schedule_[scheduling_class].push_back(work);
+    }
+    ScheduleAndDispatchTasks();
+  }
+
+
   struct SchedulingClassInfo;
 
   /// (Step 2) For each task in tasks_to_schedule_, pick a node in the system
