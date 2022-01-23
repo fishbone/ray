@@ -148,7 +148,6 @@ void CoreWorkerDirectTaskSubmitter::ReturnWorker(const rpc::WorkerAddress addr,
     // scheduling_key_entries_ hashmap.
     scheduling_key_entries_.erase(scheduling_key);
   }
-
   auto status =
       lease_entry.lease_client->ReturnWorker(addr.port, addr.worker_id, was_error);
   if (!status.ok()) {
@@ -579,9 +578,12 @@ void CoreWorkerDirectTaskSubmitter::RequestNewWorkerIfNeeded(
                            << addr.raylet_id;
 
             auto resources_copy = reply.resource_mapping();
-
-            AddWorkerLeaseClient(addr, std::move(lease_client), resources_copy,
-                                 scheduling_key);
+            if(reply.has_retry_at_raylet_address()) {
+              AddWorkerLeaseClient(addr, GetOrConnectLeaseClient(&reply.retry_at_raylet_address()), resources_copy, scheduling_key);
+            } else {
+              AddWorkerLeaseClient(addr, std::move(lease_client), resources_copy,
+                                   scheduling_key);
+            }
             RAY_CHECK(scheduling_key_entry.active_workers.size() >= 1);
             OnWorkerIdle(addr, scheduling_key,
                          /*error=*/false, resources_copy);

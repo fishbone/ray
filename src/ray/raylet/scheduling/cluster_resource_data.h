@@ -201,8 +201,8 @@ struct Node {
 
   Node(const NodeResources &resources, const Node& n)
       : last_reported_(resources), local_view_(resources) {
-    local_view_ -= n.last_reported_;
-    local_view_ += n.local_view_;
+    // local_view_ -= n.last_reported_;
+    // local_view_ += n.local_view_;
   }
 
   NodeResources *GetMutableLocalView() { return &local_view_; }

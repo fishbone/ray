@@ -304,7 +304,7 @@ bool ClusterResourceScheduler::SubtractRemoteNodeAvailableResources(
   NodeResources *resources = it->second.GetMutableLocalView();
 
   // Just double check this node can still schedule the resource request.
-  if (!IsSchedulable(resource_request, node_id, *resources)) {
+  if (!IsSchedulable(resource_request, node_id, *resources) && !release) {
     return false;
   }
 

@@ -20,7 +20,7 @@
 
 #include "ray/stats/metric_defs.h"
 #include "ray/util/logging.h"
-
+DEFINE_stats(spillback_failure, "", (), (), ray::stats::COUNT);
 namespace ray {
 namespace raylet {
 
@@ -83,7 +83,6 @@ bool ClusterTaskManager::SchedulePendingTasks() {
           GetBestSchedulableNode(*work,
                                  /*requires_object_store_memory=*/false,
                                  /*force_spillback=*/false, &is_infeasible);
-
       // There is no node that has available resources to run the request.
       // Move on to the next shape.
       if (node_id_string.empty()) {
@@ -1293,15 +1292,18 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to,
   lease_client->RequestWorkerLease(
       task_spec,
       true,
-      [this, work, spillback_to] (const Status &status, const rpc::RequestWorkerLeaseReply &reply) {
-        cluster_resource_scheduler_->ReleaseRemoteTaskResources(
-            spillback_to.Binary(), work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
+      [this, work, spillback_to, addr] (const Status &status, const rpc::RequestWorkerLeaseReply &reply) {
+        // cluster_resource_scheduler_->ReleaseRemoteTaskResources(
+        //     spillback_to.Binary(), work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
         if(!status.ok() || reply.canceled() || reply.rejected() || reply.runtime_env_setup_failed()) {
+          STATS_spillback_failure.Record(1.0);
           DoQueueAndScheduleTask(work);
           return;
         }
+        // RAY_LOG(INFO) << "Spill successfully";
         RAY_CHECK(!reply.worker_address().raylet_id().empty());
-        *work->reply = reply;
+        work->reply->CopyFrom(reply);
+        work->reply->mutable_retry_at_raylet_address()->CopyFrom(addr);
         work->callback();
       });
 }

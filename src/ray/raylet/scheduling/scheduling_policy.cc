@@ -83,7 +83,7 @@ int64_t SchedulingPolicy::HybridPolicyWithFilter(
   // place.
   std::sort(round.begin() + start_index, round.end());
 
-  int64_t best_node_id = -1;
+  int64_t best_node_id = local_node_id_;
   float best_utilization_score = INFINITY;
   bool best_is_available = false;
 
@@ -130,12 +130,14 @@ int64_t SchedulingPolicy::HybridPolicyWithFilter(
         // Break ties between available nodes by their critical resource utilization.
         update_best_node = true;
       }
-    } else if (!best_is_available &&
-               critical_resource_utilization < best_utilization_score &&
-               !require_available) {
-      // Pick the best feasible node by critical resource utilization.
-      update_best_node = true;
     }
+
+    //  else if (!best_is_available &&
+    //            critical_resource_utilization < best_utilization_score &&
+    //            !require_available) {
+    //   // Pick the best feasible node by critical resource utilization.
+    //   update_best_node = true;
+    // }
 
     if (update_best_node) {
       best_node_id = node_id;
@@ -143,7 +145,6 @@ int64_t SchedulingPolicy::HybridPolicyWithFilter(
       best_is_available = is_available;
     }
   }
-
   return best_node_id;
 }
 
