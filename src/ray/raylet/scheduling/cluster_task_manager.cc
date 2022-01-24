@@ -28,8 +28,7 @@ namespace raylet {
 const int kMaxPendingActorsToReport = 20;
 
 ClusterTaskManager::ClusterTaskManager(
-    instrumented_io_context &io_service,
-    const NodeID &self_node_id,
+    instrumented_io_context &io_service, const NodeID &self_node_id,
     std::shared_ptr<ClusterResourceScheduler> cluster_resource_scheduler,
     TaskDependencyManagerInterface &task_dependency_manager,
     std::function<bool(const WorkerID &, const NodeID &)> is_owner_alive,
@@ -58,7 +57,8 @@ ClusterTaskManager::ClusterTaskManager(
       sched_cls_cap_enabled_(RayConfig::instance().worker_cap_enabled()),
       sched_cls_cap_interval_ms_(sched_cls_cap_interval_ms),
       sched_cls_cap_max_ms_(RayConfig::instance().worker_cap_max_backoff_delay_ms()) {
-  client_call_manager_  = std::make_unique<rpc::ClientCallManager>(io_service);;
+  client_call_manager_ = std::make_unique<rpc::ClientCallManager>(io_service);
+  ;
 }
 
 bool ClusterTaskManager::SchedulePendingTasks() {
@@ -1290,12 +1290,14 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to,
 
   auto lease_client = GetOrConnectLeaseClient(&addr);
   lease_client->RequestWorkerLease(
-      task_spec,
-      true,
-      [this, work, spillback_to, addr] (const Status &status, const rpc::RequestWorkerLeaseReply &reply) {
+      task_spec, true,
+      [this, work, spillback_to, addr](const Status &status,
+                                       const rpc::RequestWorkerLeaseReply &reply) {
         // cluster_resource_scheduler_->ReleaseRemoteTaskResources(
-        //     spillback_to.Binary(), work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
-        if(!status.ok() || reply.canceled() || reply.rejected() || reply.runtime_env_setup_failed()) {
+        //     spillback_to.Binary(),
+        //     work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
+        if (!status.ok() || reply.canceled() || reply.rejected() ||
+            reply.runtime_env_setup_failed()) {
           STATS_spillback_failure.Record(1.0);
           DoQueueAndScheduleTask(work);
           return;

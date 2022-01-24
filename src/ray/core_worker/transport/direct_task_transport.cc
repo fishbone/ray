@@ -578,8 +578,10 @@ void CoreWorkerDirectTaskSubmitter::RequestNewWorkerIfNeeded(
                            << addr.raylet_id;
 
             auto resources_copy = reply.resource_mapping();
-            if(reply.has_retry_at_raylet_address()) {
-              AddWorkerLeaseClient(addr, GetOrConnectLeaseClient(&reply.retry_at_raylet_address()), resources_copy, scheduling_key);
+            if (reply.has_retry_at_raylet_address()) {
+              AddWorkerLeaseClient(
+                  addr, GetOrConnectLeaseClient(&reply.retry_at_raylet_address()),
+                  resources_copy, scheduling_key);
             } else {
               AddWorkerLeaseClient(addr, std::move(lease_client), resources_copy,
                                    scheduling_key);

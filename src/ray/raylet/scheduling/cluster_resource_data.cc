@@ -315,7 +315,7 @@ bool NodeResources::operator==(const NodeResources &other) {
   return true;
 }
 
-NodeResources& NodeResources::operator-=(const NodeResources &other) {
+NodeResources &NodeResources::operator-=(const NodeResources &other) {
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
     predefined_resources[i].available -= other.predefined_resources[i].available;
   }
@@ -332,7 +332,7 @@ NodeResources& NodeResources::operator-=(const NodeResources &other) {
   return *this;
 }
 
-NodeResources& NodeResources::operator+=(const NodeResources &other) {
+NodeResources &NodeResources::operator+=(const NodeResources &other) {
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
     predefined_resources[i].available += other.predefined_resources[i].available;
   }
@@ -348,7 +348,6 @@ NodeResources& NodeResources::operator+=(const NodeResources &other) {
   }
   return *this;
 }
-
 
 bool NodeResources::operator!=(const NodeResources &other) { return !(*this == other); }
 

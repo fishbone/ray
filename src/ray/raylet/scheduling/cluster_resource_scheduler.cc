@@ -105,7 +105,7 @@ void ClusterResourceScheduler::AddOrUpdateNode(int64_t node_id,
     // This node is new, so add it to the map.
     nodes_.emplace(node_id, node_resources);
   } else {
-    if(node_id == local_node_id_) {
+    if (node_id == local_node_id_) {
       // This node exists, so update its resources.
       it->second = Node(node_resources);
     } else {
@@ -309,17 +309,19 @@ bool ClusterResourceScheduler::SubtractRemoteNodeAvailableResources(
   }
 
   for (size_t i = 0; i < PredefinedResources_MAX; i++) {
-    if(release) {
-      resources->predefined_resources[i].available += resource_request.predefined_resources[i];
+    if (release) {
+      resources->predefined_resources[i].available +=
+          resource_request.predefined_resources[i];
     } else {
-      resources->predefined_resources[i].available -= resource_request.predefined_resources[i];
+      resources->predefined_resources[i].available -=
+          resource_request.predefined_resources[i];
     }
   }
 
   for (const auto &task_req_custom_resource : resource_request.custom_resources) {
     auto it = resources->custom_resources.find(task_req_custom_resource.first);
     if (it != resources->custom_resources.end()) {
-      if(release) {
+      if (release) {
         it->second.available += task_req_custom_resource.second;
       } else {
         it->second.available -= task_req_custom_resource.second;
