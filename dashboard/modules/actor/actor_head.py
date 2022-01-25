@@ -117,7 +117,7 @@ class ActorHead(dashboard_utils.DashboardHeadModule):
             # If actor is not new registered but updated, we only update
             # states related fields.
             if actor_table_data["state"] != "DEPENDENCIES_UNREADY":
-                actor_table_data_copy = dict(DataSource.actors[actor_id])
+                actor_table_data_copy = DataSource.actors[actor_id]
                 for k in state_keys:
                     actor_table_data_copy[k] = actor_table_data[k]
                 actor_table_data = actor_table_data_copy
@@ -128,11 +128,11 @@ class ActorHead(dashboard_utils.DashboardHeadModule):
             DataSource.actors[actor_id] = actor_table_data
             # Update node actors (only when node_id is not Nil).
             if node_id != actor_consts.NIL_NODE_ID:
-                node_actors = dict(DataSource.node_actors.get(node_id, {}))
+                node_actors = DataSource.node_actors.get(node_id, {})
                 node_actors[actor_id] = actor_table_data
                 DataSource.node_actors[node_id] = node_actors
             # Update job actors.
-            job_actors = dict(DataSource.job_actors.get(job_id, {}))
+            job_actors = DataSource.job_actors.get(job_id, {})
             job_actors[actor_id] = actor_table_data
             DataSource.job_actors[job_id] = job_actors
 

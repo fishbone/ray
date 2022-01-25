@@ -25,7 +25,7 @@ class DataSource:
     node_physical_stats = Dict()
     # {actor id hex(str): actor table data(dict of ActorTableData
     # in gcs.proto)}
-    actors = Dict()
+    actors = dict()
     # {job id hex(str): job table data(dict of JobTableData in gcs.proto)}
     jobs = Dict()
     # {node id hex(str): dashboard agent [http port(int), grpc port(int)]}
@@ -39,11 +39,11 @@ class DataSource:
     # {node id hex(str): worker list}
     node_workers = Dict()
     # {node id hex(str): {actor id hex(str): actor table data}}
-    node_actors = Dict()
+    node_actors = dict()
     # {job id hex(str): worker list}
     job_workers = Dict()
     # {job id hex(str): {actor id hex(str): actor table data}}
-    job_actors = Dict()
+    job_actors = dict()
     # {worker id(str): core worker stats}
     core_worker_stats = Dict()
     # {job id hex(str): {event id(str): event dict}}
