@@ -1293,9 +1293,11 @@ void ClusterTaskManager::Spillback(const NodeID &spillback_to,
       task_spec, true,
       [this, work, spillback_to, addr](const Status &status,
                                        const rpc::RequestWorkerLeaseReply &reply) {
+
         // cluster_resource_scheduler_->ReleaseRemoteTaskResources(
         //     spillback_to.Binary(),
         //     work->task.GetTaskSpecification().GetRequiredResources().GetResourceMap());
+        cluster_resource_scheduler_->UpdateNode(spillback_to.Binary(), reply.resources_data());
         if (!status.ok() || reply.canceled() || reply.rejected() ||
             reply.runtime_env_setup_failed()) {
           STATS_spillback_failure.Record(1.0);

@@ -1531,7 +1531,7 @@ void NodeManager::HandleRequestResourceReport(
   auto resources_data = reply->mutable_resources();
   FillResourceReport(*resources_data);
   resources_data->set_cluster_full_of_actors_detected(resource_deadlock_warned_ >= 1);
-
+  resources_data->set_ts(absl::GetCurrentTimeNanos());
   send_reply_callback(Status::OK(), nullptr, nullptr);
 }
 
@@ -1581,27 +1581,21 @@ void NodeManager::HandleRequestWorkerLease(const rpc::RequestWorkerLeaseRequest 
                                       send_reply_callback](
                                          Status status, std::function<void()> success,
                                          std::function<void()> failure) {
-    // If resources are not enough due to normal tasks' preemption
-    // for GCS based actor scheduling, return a rejection
-    // with normal task resource usages so GCS can update
-    // its resource view of this raylet.
-    if (reply->rejected() && is_actor_creation_task) {
-      ResourceSet normal_task_resources =
-          cluster_task_manager_->CalcNormalTaskResources();
-      RAY_LOG(DEBUG) << "Reject leasing as the raylet has no enough resources."
-                     << " actor_id = " << actor_id
-                     << ", normal_task_resources = " << normal_task_resources.ToString()
-                     << ", local_resoruce_view = "
-                     << cluster_resource_scheduler_->GetLocalResourceViewString();
-      auto resources_data = reply->mutable_resources_data();
-      resources_data->set_node_id(self_node_id_.Binary());
-      resources_data->set_resources_normal_task_changed(true);
-      auto &normal_task_map = *(resources_data->mutable_resources_normal_task());
-      normal_task_map = {normal_task_resources.GetResourceMap().begin(),
-                         normal_task_resources.GetResourceMap().end()};
-      resources_data->set_resources_normal_task_timestamp(absl::GetCurrentTimeNanos());
-    }
+    ResourceSet normal_task_resources = cluster_task_manager_->CalcNormalTaskResources();
+    RAY_LOG(DEBUG) << "Reject leasing as the raylet has no enough resources."
+                   << " actor_id = " << actor_id
+                   << ", normal_task_resources = " << normal_task_resources.ToString()
+                   << ", local_resoruce_view = "
+                   << cluster_resource_scheduler_->GetLocalResourceViewString();
+    auto resources_data = reply->mutable_resources_data();
+    resources_data->set_node_id(self_node_id_.Binary());
+    resources_data->set_resources_normal_task_changed(true);
 
+    auto &normal_task_map = *(resources_data->mutable_resources_normal_task());
+    normal_task_map = {normal_task_resources.GetResourceMap().begin(),
+      normal_task_resources.GetResourceMap().end()};
+    resources_data->set_resources_normal_task_timestamp(absl::GetCurrentTimeNanos());
+    resources_data->set_ts(absl::GetCurrentTimeNanos());
     send_reply_callback(status, success, failure);
   };
 

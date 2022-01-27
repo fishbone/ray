@@ -105,11 +105,8 @@ void ClusterResourceScheduler::AddOrUpdateNode(int64_t node_id,
     // This node is new, so add it to the map.
     nodes_.emplace(node_id, node_resources);
   } else {
-    if (node_id == local_node_id_) {
-      // This node exists, so update its resources.
+    if (node_id == local_node_id_ || it->second.GetLocalView().ts > node_resources.ts) {
       it->second = Node(node_resources);
-    } else {
-      it->second = Node(node_resources, it->second);
     }
   }
 }
@@ -126,6 +123,7 @@ bool ClusterResourceScheduler::UpdateNode(const std::string &node_id_string,
   NodeResources node_resources = ResourceMapToNodeResources(
       string_to_int_map_, resources_total, resources_available);
   NodeResources local_view;
+  local_view.ts = resource_data.ts();
   RAY_CHECK(GetNodeResources(node_id, &local_view));
 
   if (resource_data.resources_total_size() > 0) {
