@@ -248,24 +248,23 @@ struct SyncerServerTest {
   }
 
   void WaitSendingFlush() {
-    while (true) {
+    while(true) {
       std::promise<bool> p;
       auto f = p.get_future();
-      io_context.post(
-          [&p, this]() mutable {
-            for (const auto &[node_id, conn] : syncer->sync_connections_) {
-              if (!conn->sending_queue_.empty()) {
-                p.set_value(false);
-                RAY_LOG(INFO) << NodeID::FromBinary(syncer->GetNodeId()) << ": "
-                              << "Waiting for message on " << NodeID::FromBinary(node_id)
-                              << " to be sent."
-                              << " Remainings " << conn->sending_queue_.size();
-                return;
-              }
-            }
-            p.set_value(true);
-          },
-          "TEST");
+      io_context.post([&p, this]() mutable {
+        for(const auto& [node_id, conn] : syncer->sync_connections_) {
+          if(!conn->sending_queue_.empty()) {
+            p.set_value(false);
+            RAY_LOG(INFO)
+                << NodeID::FromBinary(syncer->GetNodeId()) << ": "
+                << "Waiting for message on " << NodeID::FromBinary(node_id) << " to be sent."
+                          << " Remainings " << conn->sending_queue_.size();
+            return;
+          }
+        }
+        p.set_value(true);
+      },
+        "TEST");
       if (f.get()) {
         return;
       } else {
@@ -562,7 +561,7 @@ bool CompareViews(const std::vector<std::unique_ptr<SyncerServerTest>> &servers,
       const auto &vv = iter->second;
 
       if (!google::protobuf::util::MessageDifferencer::Equals(*v[0], *vv[0])) {
-        RAY_LOG(ERROR) << i << ": FAIL RESOURCE: " << v[0] << ", " << vv[0] << ", "
+        RAY_LOG(ERROR) << i << "\t" << ": FAIL RESOURCE: " << v[0] << ", " << vv[0] << ", "
                        << v[1] << ", " << vv[1];
         std::string dbg_message;
         google::protobuf::util::MessageToJsonString(*v[0], &dbg_message);
@@ -662,9 +661,9 @@ bool TestCorrectness(std::function<TClusterView(RaySyncer &syncer)> get_cluster_
     return CompareViews(servers, views, g);
   };
 
-  for (auto &server : servers) {
-    server->WaitSendingFlush();
-  }
+  // for(auto& server : servers) {
+  //   server->WaitSendingFlush();
+  // }
 
   for (size_t i = 0; i < 10; ++i) {
     if (!check()) {
@@ -698,9 +697,10 @@ bool TestCorrectness(std::function<TClusterView(RaySyncer &syncer)> get_cluster_
     }
   }
 
-  for (auto &server : servers) {
-    server->WaitSendingFlush();
-  }
+  // for(auto& server : servers) {
+  //   server->WaitSendingFlush();
+  // }
+
   // Make sure everything is synced.
   for (size_t i = 0; i < 10; ++i) {
     if (!check()) {
@@ -766,7 +766,36 @@ TEST(SyncerTest, TestMToN) {
         "TEST");
     return f.get();
   };
-  ASSERT_TRUE(TestCorrectness(get_cluster_view, servers, g));
+  if(!TestCorrectness(get_cluster_view, servers, g)) {
+    // int i = 0;
+    // for(auto& s : servers) {
+    //   RAY_LOG(ERROR) << i++ << ": " << NodeID::FromBinary(s->syncer->GetNodeId());
+    //   for(auto& [node_id, conn] : s->syncer->sync_connections_) {
+    //     for(auto [t, v1, v2, m] : conn->msgs) {
+    //       RAY_LOG(ERROR) << t << ": Sending "
+    //                      << NodeID::FromBinary(m->node_id())
+    //                      << " - " << m->version()
+    //                      << " [" << NodeID::FromBinary(s->syncer->GetNodeId())
+    //                      << " TO " << NodeID::FromBinary(conn->GetNodeId())
+    //                      << "] " << v1 << " " << v2;
+    //     }
+    //     for(auto [t, v1, v2, m] : conn->recv_msgs) {
+    //       if(m) {
+    //         RAY_LOG(ERROR) << t << ": Recv "
+    //                        << NodeID::FromBinary(m->node_id())
+    //                        << " - " << m->version()
+    //                        << " [" << NodeID::FromBinary(s->syncer->GetNodeId())
+    //                        << " FROM " << NodeID::FromBinary(conn->GetNodeId())
+    //                        << "] " << v1 << " " << v2;
+    //       } else {
+    //         RAY_LOG(ERROR) << t << ": EMPTY M";
+    //       }
+    //     }
+
+    //   }
+    // }
+    ASSERT_FALSE(true);
+  }
 }
 
 }  // namespace syncer

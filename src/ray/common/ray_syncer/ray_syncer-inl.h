@@ -107,7 +107,9 @@ class NodeSyncConnection {
   /// \param messages The message received.
   void ReceiveUpdate(RaySyncMessages messages);
 
- protected:
+  std::vector<std::tuple<absl::Time, int64_t, int64_t, std::shared_ptr<const RaySyncMessage>>> msgs;
+  std::vector<std::tuple<absl::Time, int64_t, int64_t, std::shared_ptr<const RaySyncMessage>>> recv_msgs;
+ public:
   // For testing
   FRIEND_TEST(RaySyncerTest, NodeSyncConnection);
   friend class SyncerServerTest;

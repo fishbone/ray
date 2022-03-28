@@ -81,10 +81,12 @@ void NodeSyncConnection::ReceiveUpdate(RaySyncMessages messages) {
                    << " component_id=" << message.component_id()
                    << ", message_version=" << message.version()
                    << ", local_message_version=" << node_versions[message.component_id()];
-    if (node_versions[message.component_id()] < message.version()) {
-      node_versions[message.component_id()] = message.version();
+    auto msg_ptr = std::make_shared<RaySyncMessage>(std::move(message));
+    recv_msgs.emplace_back(absl::Now(), node_versions[msg_ptr->component_id()], message.version(), msg_ptr);
+    if (node_versions[msg_ptr->component_id()] < msg_ptr->version()) {
+      node_versions[msg_ptr->component_id()] = msg_ptr->version();
+      instance_.BroadcastMessage(msg_ptr);
     }
-    instance_.BroadcastMessage(std::make_shared<RaySyncMessage>(std::move(message)));
   }
 }
 
@@ -100,6 +102,7 @@ bool NodeSyncConnection::PushToSendingQueue(
 
   auto &node_versions = GetNodeComponentVersions(message->node_id());
   if (node_versions[message->component_id()] < message->version()) {
+    // msgs.emplace_back(absl::Now(), node_versions[message->component_id()], message->version(), message);
     sending_queue_.insert(message);
     node_versions[message->component_id()] = message->version();
     return true;
@@ -174,6 +177,7 @@ void ClientSyncConnection::DoSend() {
     holder.push_back(*iter);
     sending_queue_.erase(iter++);
   }
+
   if (request->sync_messages_size() != 0) {
     stub_->async()->Update(
         client_context.get(),
