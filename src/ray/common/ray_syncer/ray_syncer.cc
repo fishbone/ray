@@ -20,7 +20,7 @@
 namespace ray {
 namespace syncer {
 
-NodeState::NodeState() { snapshots_taken_.fill(-1); }
+NodeState::NodeState() { snapshots_versions_taken_.fill(-1); }
 
 bool NodeState::SetComponent(RayComponentId cid,
                              const ReporterInterface *reporter,
@@ -31,7 +31,7 @@ bool NodeState::SetComponent(RayComponentId cid,
     receivers_[cid] = receiver;
     return true;
   } else {
-    RAY_LOG(ERROR) << "Fail to set components, component_id:" << cid
+    RAY_LOG(FATAL) << "Fail to set components, component_id:" << cid
                    << ", reporter:" << reporter << ", receiver:" << receiver;
     return false;
   }
@@ -41,9 +41,9 @@ std::optional<RaySyncMessage> NodeState::GetSnapshot(RayComponentId cid) {
   if (reporters_[cid] == nullptr) {
     return std::nullopt;
   }
-  auto message = reporters_[cid]->Snapshot(snapshots_taken_[cid], cid);
+  auto message = reporters_[cid]->Snapshot(snapshots_versions_taken_[cid], cid);
   if (message != std::nullopt) {
-    snapshots_taken_[cid] = message->version();
+    snapshots_versions_taken_[cid] = message->version();
     RAY_LOG(DEBUG) << "Snapshot taken: cid:" << cid << ", version:" << message->version()
                    << ", node:" << NodeID::FromBinary(message->node_id());
   }
@@ -82,11 +82,11 @@ void NodeSyncConnection::ReceiveUpdate(RaySyncMessages messages) {
                    << ", message_version=" << message.version()
                    << ", local_message_version=" << node_versions[message.component_id()];
     auto msg_ptr = std::make_shared<RaySyncMessage>(std::move(message));
-    recv_msgs.emplace_back(absl::Now(), node_versions[msg_ptr->component_id()], message.version(), msg_ptr);
+    msgs.emplace_back(absl::Now(), "RECV", node_versions[msg_ptr->component_id()], msg_ptr->version(), msg_ptr);
     if (node_versions[msg_ptr->component_id()] < msg_ptr->version()) {
       node_versions[msg_ptr->component_id()] = msg_ptr->version();
-      instance_.BroadcastMessage(msg_ptr);
     }
+    instance_.BroadcastMessage(msg_ptr);
   }
 }
 
@@ -102,9 +102,9 @@ bool NodeSyncConnection::PushToSendingQueue(
 
   auto &node_versions = GetNodeComponentVersions(message->node_id());
   if (node_versions[message->component_id()] < message->version()) {
-    // msgs.emplace_back(absl::Now(), node_versions[message->component_id()], message->version(), message);
-    sending_queue_.insert(message);
+    msgs.emplace_back(absl::Now(), "PUSH", node_versions[message->component_id()], message->version(), message);
     node_versions[message->component_id()] = message->version();
+    sending_queue_.insert(message);
     return true;
   }
   return false;
