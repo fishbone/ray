@@ -248,23 +248,24 @@ struct SyncerServerTest {
   }
 
   void WaitSendingFlush() {
-    while(true) {
+    while (true) {
       std::promise<bool> p;
       auto f = p.get_future();
-      io_context.post([&p, this]() mutable {
-        for(const auto& [node_id, conn] : syncer->sync_connections_) {
-          if(!conn->sending_queue_.empty()) {
-            p.set_value(false);
-            RAY_LOG(INFO)
-                << NodeID::FromBinary(syncer->GetNodeId()) << ": "
-                << "Waiting for message on " << NodeID::FromBinary(node_id) << " to be sent."
-                          << " Remainings " << conn->sending_queue_.size();
-            return;
-          }
-        }
-        p.set_value(true);
-      },
-        "TEST");
+      io_context.post(
+          [&p, this]() mutable {
+            for (const auto &[node_id, conn] : syncer->sync_connections_) {
+              if (!conn->sending_queue_.empty()) {
+                p.set_value(false);
+                RAY_LOG(INFO) << NodeID::FromBinary(syncer->GetNodeId()) << ": "
+                              << "Waiting for message on " << NodeID::FromBinary(node_id)
+                              << " to be sent."
+                              << " Remainings " << conn->sending_queue_.size();
+                return;
+              }
+            }
+            p.set_value(true);
+          },
+          "TEST");
       if (f.get()) {
         return;
       } else {
@@ -561,8 +562,9 @@ bool CompareViews(const std::vector<std::unique_ptr<SyncerServerTest>> &servers,
       const auto &vv = iter->second;
 
       if (!google::protobuf::util::MessageDifferencer::Equals(*v[0], *vv[0])) {
-        RAY_LOG(ERROR) << i << "\t" << ": FAIL RESOURCE: " << v[0] << ", " << vv[0] << ", "
-                       << v[1] << ", " << vv[1];
+        RAY_LOG(ERROR) << i << "\t"
+                       << ": FAIL RESOURCE: " << v[0] << ", " << vv[0] << ", " << v[1]
+                       << ", " << vv[1];
         std::string dbg_message;
         google::protobuf::util::MessageToJsonString(*v[0], &dbg_message);
         RAY_LOG(ERROR) << "server[0] >> "
@@ -766,7 +768,7 @@ TEST(SyncerTest, TestMToN) {
         "TEST");
     return f.get();
   };
-  if(!TestCorrectness(get_cluster_view, servers, g)) {
+  if (!TestCorrectness(get_cluster_view, servers, g)) {
     // int i = 0;
     // for(auto& s : servers) {
     //   RAY_LOG(ERROR) << i++ << ": " << NodeID::FromBinary(s->syncer->GetNodeId());

@@ -82,7 +82,11 @@ void NodeSyncConnection::ReceiveUpdate(RaySyncMessages messages) {
                    << ", message_version=" << message.version()
                    << ", local_message_version=" << node_versions[message.component_id()];
     auto msg_ptr = std::make_shared<RaySyncMessage>(std::move(message));
-    msgs.emplace_back(absl::Now(), "RECV", node_versions[msg_ptr->component_id()], msg_ptr->version(), msg_ptr);
+    msgs.emplace_back(absl::Now(),
+                      "RECV",
+                      node_versions[msg_ptr->component_id()],
+                      msg_ptr->version(),
+                      msg_ptr);
     if (node_versions[msg_ptr->component_id()] < msg_ptr->version()) {
       node_versions[msg_ptr->component_id()] = msg_ptr->version();
     }
@@ -102,7 +106,11 @@ bool NodeSyncConnection::PushToSendingQueue(
 
   auto &node_versions = GetNodeComponentVersions(message->node_id());
   if (node_versions[message->component_id()] < message->version()) {
-    msgs.emplace_back(absl::Now(), "PUSH", node_versions[message->component_id()], message->version(), message);
+    msgs.emplace_back(absl::Now(),
+                      "PUSH",
+                      node_versions[message->component_id()],
+                      message->version(),
+                      message);
     node_versions[message->component_id()] = message->version();
     sending_queue_.insert(message);
     return true;
