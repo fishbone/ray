@@ -333,10 +333,6 @@ DEFAULT_RUNTIME_ENV_TIMEOUT_SECONDS = 600
 # created.
 CALL_STACK_LINE_DELIMITER = " | "
 
-# The default gRPC max message size is 4 MiB, we use a larger number of 100 MiB
-# NOTE: This is equal to the C++ limit of (RAY_CONFIG::max_grpc_message_size)
-GRPC_CPP_MAX_MESSAGE_SIZE = 100 * 1024 * 1024
-
 # GRPC options
 GRPC_ENABLE_HTTP_PROXY = (
     1

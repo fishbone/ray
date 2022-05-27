@@ -11,6 +11,7 @@ from ray import ray_constants
 from ray.core.generated.common_pb2 import ErrorType
 from ray.core.generated import gcs_service_pb2_grpc
 from ray.core.generated import gcs_service_pb2
+from ray._raylet import Config
 from ray.core.generated.gcs_pb2 import (
     ActorTableData,
     GcsNodeInfo,
@@ -64,8 +65,6 @@ __all__ = [
 WORKER = 0
 DRIVER = 1
 
-# Cap messages at 512MB
-_MAX_MESSAGE_LENGTH = 512 * 1024 * 1024
 # Send keepalive every 60s
 _GRPC_KEEPALIVE_TIME_MS = 60 * 1000
 # Keepalive should be replied < 60s
@@ -76,8 +75,8 @@ _GRPC_KEEPALIVE_TIMEOUT_MS = 60 * 1000
 # grpc.use_local_subchannel_pool=0: Subchannels are shared.
 _GRPC_OPTIONS = [
     *ray_constants.GLOBAL_GRPC_OPTIONS,
-    ("grpc.max_send_message_length", _MAX_MESSAGE_LENGTH),
-    ("grpc.max_receive_message_length", _MAX_MESSAGE_LENGTH),
+    ("grpc.max_send_message_length", Config().max_grpc_message_size()),
+    ("grpc.max_receive_message_length", Config().max_grpc_message_size()),
     ("grpc.keepalive_time_ms", _GRPC_KEEPALIVE_TIME_MS),
     ("grpc.keepalive_timeout_ms", _GRPC_KEEPALIVE_TIMEOUT_MS),
 ]

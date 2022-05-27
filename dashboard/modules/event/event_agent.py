@@ -3,7 +3,6 @@ import asyncio
 import logging
 from typing import Union
 
-import ray.experimental.internal_kv as internal_kv
 import ray.ray_constants as ray_constants
 import ray._private.utils as utils
 import ray.dashboard.utils as dashboard_utils
@@ -37,9 +36,9 @@ class EventAgent(dashboard_utils.DashboardAgentModule):
         while True:
             try:
                 # TODO: Use async version if performance is an issue
-                dashboard_rpc_address = internal_kv._internal_kv_get(
-                    dashboard_consts.DASHBOARD_RPC_ADDRESS,
-                    namespace=ray_constants.KV_NAMESPACE_DASHBOARD,
+                dashboard_rpc_address = await self.gcs_aio_client.internal_kv_get(
+                    dashboard_consts.DASHBOARD_RPC_ADDRESS.encode(),
+                    namespace=ray_constants.KV_NAMESPACE_DASHBOARD.encode(),
                 )
                 if dashboard_rpc_address:
                     logger.info("Report events to %s", dashboard_rpc_address)

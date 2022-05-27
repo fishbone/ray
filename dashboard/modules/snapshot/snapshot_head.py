@@ -8,11 +8,6 @@ from ray import ray_constants
 from ray.core.generated import gcs_service_pb2
 from ray.core.generated import gcs_pb2
 from ray.core.generated import gcs_service_pb2_grpc
-from ray.experimental.internal_kv import (
-    _internal_kv_initialized,
-    _internal_kv_get,
-    _internal_kv_list,
-)
 import ray.dashboard.utils as dashboard_utils
 import ray.dashboard.optional_utils as dashboard_optional_utils
 from ray.runtime_env import RuntimeEnv
@@ -34,7 +29,6 @@ class APIHead(dashboard_utils.DashboardHeadModule):
         self._gcs_job_info_stub = None
         self._gcs_actor_info_stub = None
         self._dashboard_head = dashboard_head
-        assert _internal_kv_initialized()
         self._job_info_client = JobInfoStorageClient()
         # For offloading CPU intensive work.
         self._thread_pool = concurrent.futures.ThreadPoolExecutor(
@@ -203,36 +197,29 @@ class APIHead(dashboard_utils.DashboardHeadModule):
         # Serve wraps Ray's internal KV store and specially formats the keys.
         # These are the keys we are interested in:
         # SERVE_CONTROLLER_NAME(+ optional random letters):SERVE_SNAPSHOT_KEY
-        # TODO: Convert to async GRPC, if CPU usage is not a concern.
-        def get_deployments():
-            serve_keys = _internal_kv_list(
-                SERVE_CONTROLLER_NAME, namespace=ray_constants.KV_NAMESPACE_SERVE
-            )
-            serve_snapshot_keys = filter(
-                lambda k: SERVE_SNAPSHOT_KEY in str(k), serve_keys
-            )
-
-            deployments_per_controller: List[Dict[str, Any]] = []
-            for key in serve_snapshot_keys:
-                val_bytes = _internal_kv_get(
-                    key, namespace=ray_constants.KV_NAMESPACE_SERVE
-                ) or "{}".encode("utf-8")
-                deployments_per_controller.append(json.loads(val_bytes.decode("utf-8")))
-            # Merge the deployments dicts of all controllers.
-            deployments: Dict[str, Any] = {
-                k: v for d in deployments_per_controller for k, v in d.items()
-            }
-            # Replace the keys (deployment names) with their hashes to prevent
-            # collisions caused by the automatic conversion to camelcase by the
-            # dashboard agent.
-            return {
-                hashlib.sha1(name.encode()).hexdigest(): info
-                for name, info in deployments.items()
-            }
-
-        return await asyncio.get_event_loop().run_in_executor(
-            executor=self._thread_pool, func=get_deployments
+        serve_keys = self._dashboard_head.aio_gcs_client.internal_kv_keys(
+            SERVE_CONTROLLER_NAME.encode(),
+            namespace=ray_constants.KV_NAMESPACE_SERVE.encode(),
         )
+        serve_snapshot_keys = filter(lambda k: SERVE_SNAPSHOT_KEY in str(k), serve_keys)
+
+        deployments_per_controller: List[Dict[str, Any]] = []
+        for key in serve_snapshot_keys:
+            val_bytes = self._dashboard_head.aio_gcs_client.internal_kv_get(
+                key.encode(), namespace=ray_constants.KV_NAMESPACE_SERVE.encode()
+            ) or "{}".encode("utf-8")
+            deployments_per_controller.append(json.loads(val_bytes.decode("utf-8")))
+        # Merge the deployments dicts of all controllers.
+        deployments: Dict[str, Any] = {
+            k: v for d in deployments_per_controller for k, v in d.items()
+        }
+        # Replace the keys (deployment names) with their hashes to prevent
+        # collisions caused by the automatic conversion to camelcase by the
+        # dashboard agent.
+        return {
+            hashlib.sha1(name.encode()).hexdigest(): info
+            for name, info in deployments.items()
+        }
 
     async def get_session_name(self):
         # TODO(yic): Convert to async GRPC.

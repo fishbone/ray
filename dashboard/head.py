@@ -10,9 +10,8 @@ try:
 except ImportError:
     from grpc.experimental import aio as aiogrpc
 
-import ray.experimental.internal_kv as internal_kv
 import ray._private.utils
-from ray._private.gcs_utils import GcsClient, check_health
+from ray._private.gcs_utils import GcsAioClient, GcsChannel, check_health
 import ray._private.services
 import ray.dashboard.consts as dashboard_consts
 import ray.dashboard.utils as dashboard_utils
@@ -27,12 +26,6 @@ from ray.dashboard.utils import async_loop_forever
 logger = logging.getLogger(__name__)
 
 aiogrpc.init_grpc_aio()
-GRPC_CHANNEL_OPTIONS = (
-    *ray_constants.GLOBAL_GRPC_OPTIONS,
-    ("grpc.max_send_message_length", ray_constants.GRPC_CPP_MAX_MESSAGE_SIZE),
-    ("grpc.max_receive_message_length", ray_constants.GRPC_CPP_MAX_MESSAGE_SIZE),
-)
-
 
 class GCSHealthCheckThread(threading.Thread):
     def __init__(self, gcs_address: str):
@@ -85,7 +78,7 @@ class DashboardHead:
         self.log_dir = log_dir
         self.temp_dir = temp_dir
         self.session_dir = session_dir
-        self.aiogrpc_gcs_channel = None
+        self.aio_gcs_channel = None
         self.gcs_error_subscriber = None
         self.gcs_log_subscriber = None
         self.ip = ray.util.get_node_ip_address()
@@ -169,14 +162,10 @@ class DashboardHead:
         gcs_address = self.gcs_address
 
         # Dashboard will handle connection failure automatically
-        self.gcs_client = GcsClient(address=gcs_address, nums_reconnect_retry=0)
-        internal_kv._initialize_internal_kv(self.gcs_client)
-        self.aiogrpc_gcs_channel = ray._private.utils.init_grpc_channel(
-            gcs_address, GRPC_CHANNEL_OPTIONS, asynchronous=True
-        )
-
-        self.gcs_error_subscriber = GcsAioErrorSubscriber(address=gcs_address)
-        self.gcs_log_subscriber = GcsAioLogSubscriber(address=gcs_address)
+        self.aio_gcs_channel = GcsChannel(gcs_address, True)
+        self.aio_gcs_client = GcsAioClient(channel=self.aio_gcs_channel)
+        self.gcs_error_subscriber = GcsAioErrorSubscriber(channel=self.aio_gcs_channel.channel())
+        self.gcs_log_subscriber = GcsAioLogSubscriber(channel=self.aio_gcs_channel.channel())
         await self.gcs_error_subscriber.subscribe()
         await self.gcs_log_subscriber.subscribe()
 
@@ -201,18 +190,19 @@ class DashboardHead:
         if not self.minimal:
             self.http_server = await self._configure_http_server(modules)
             http_host, http_port = self.http_server.get_address()
-        internal_kv._internal_kv_put(
-            ray_constants.DASHBOARD_ADDRESS,
-            f"{http_host}:{http_port}",
-            namespace=ray_constants.KV_NAMESPACE_DASHBOARD,
+        await self.aio_gcs_client.internal_kv_put(
+            ray_constants.DASHBOARD_ADDRESS.encode(),
+            (f"{http_host}:{http_port}").encode(),
+            True,
+            namespace=ray_constants.KV_NAMESPACE_DASHBOARD.encode(),
         )
 
         # TODO: Use async version if performance is an issue
         # Write the dashboard head port to gcs kv.
-        internal_kv._internal_kv_put(
-            dashboard_consts.DASHBOARD_RPC_ADDRESS,
-            f"{self.ip}:{self.grpc_port}",
-            namespace=ray_constants.KV_NAMESPACE_DASHBOARD,
+        await self.aio_gcs_client.internal_kv_put(
+            dashboard_consts.DASHBOARD_RPC_ADDRESS.encode(),
+            (f"{self.ip}:{self.grpc_port}").encode(),
+            namespace=ray_constants.KV_NAMESPACE_DASHBOARD.encode(),
         )
 
         # Freeze signal after all modules loaded.
