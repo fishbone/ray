@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 aiogrpc.init_grpc_aio()
 
+
 class GCSHealthCheckThread(threading.Thread):
     def __init__(self, gcs_address: str):
         self.gcs_address = gcs_address
@@ -164,8 +165,12 @@ class DashboardHead:
         # Dashboard will handle connection failure automatically
         self.aio_gcs_channel = GcsChannel(gcs_address, True)
         self.aio_gcs_client = GcsAioClient(channel=self.aio_gcs_channel)
-        self.gcs_error_subscriber = GcsAioErrorSubscriber(channel=self.aio_gcs_channel.channel())
-        self.gcs_log_subscriber = GcsAioLogSubscriber(channel=self.aio_gcs_channel.channel())
+        self.gcs_error_subscriber = GcsAioErrorSubscriber(
+            channel=self.aio_gcs_channel.channel()
+        )
+        self.gcs_log_subscriber = GcsAioLogSubscriber(
+            channel=self.aio_gcs_channel.channel()
+        )
         await self.gcs_error_subscriber.subscribe()
         await self.gcs_log_subscriber.subscribe()
 
