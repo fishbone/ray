@@ -142,7 +142,7 @@ def start(
         max_restarts=-1,
         max_task_retries=-1,
         # Pin Serve controller on the head node.
-        resources={get_current_node_resource_key(): 0.01},
+        # resources={get_current_node_resource_key(): 0.01},
         namespace=SERVE_NAMESPACE,
         max_concurrency=CONTROLLER_MAX_CONCURRENCY,
     ).remote(
