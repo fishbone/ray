@@ -154,7 +154,7 @@ prepare_docker() {
     " > $tmp_dir/Dockerfile
 
     pushd $tmp_dir
-    docker build . -t flovena/ray_ci:v2
+    docker build . -t flovena/ray_ci:v3
     popd
 
     popd
