@@ -1633,14 +1633,21 @@ cdef class CoreWorker:
                 name, num_returns, c_resources,
                 b"",
                 serialized_runtime_env_info)
-            with nogil:
-                return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitTask(
-                    ray_function, args_vector, task_options,
-                    max_retries, retry_exceptions,
-                    c_scheduling_strategy,
-                    debugger_breakpoint,
-                    serialized_retry_exception_allowlist,
-                )
+            # with nogil:
+            #     return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitTask(
+            #         ray_function, args_vector, task_options,
+            #         max_retries, retry_exceptions,
+            #         c_scheduling_strategy,
+            #         debugger_breakpoint,
+            #         serialized_retry_exception_allowlist,
+            #     )
+            return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitTask(
+                ray_function, args_vector, task_options,
+                max_retries, retry_exceptions,
+                c_scheduling_strategy,
+                debugger_breakpoint,
+                serialized_retry_exception_allowlist,
+            )
 
             # These arguments were serialized and put into the local object
             # store during task submission. The backend increments their local
@@ -1827,13 +1834,19 @@ cdef class CoreWorker:
             # NOTE(edoakes): releasing the GIL while calling this method causes
             # segfaults. See relevant issue for details:
             # https://github.com/ray-project/ray/pull/12803
-            with nogil:
-                return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitActorTask(
-                    c_actor_id,
-                    ray_function,
-                    args_vector,
-                    CTaskOptions(
-                        name, num_returns, c_resources, concurrency_group_name))
+            # with nogil:
+            #     return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitActorTask(
+            #         c_actor_id,
+            #         ray_function,
+            #         args_vector,
+            #         CTaskOptions(
+            #             name, num_returns, c_resources, concurrency_group_name))
+            return_refs = CCoreWorkerProcess.GetCoreWorker().SubmitActorTask(
+                c_actor_id,
+                ray_function,
+                args_vector,
+                CTaskOptions(
+                    name, num_returns, c_resources, concurrency_group_name))
             # These arguments were serialized and put into the local object
             # store during task submission. The backend increments their local
             # ref count initially to ensure that they remain in scope until we

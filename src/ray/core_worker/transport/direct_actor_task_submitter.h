@@ -81,6 +81,7 @@ class CoreWorkerDirectActorTaskSubmitter
         io_service_(io_service) {
     next_queueing_warn_threshold_ =
         ::RayConfig::instance().actor_excess_queueing_warn_threshold();
+    mu_.EnableDebugLog("ActorSubmitter");
   }
 
   /// Add an actor queue. This should be called whenever a reference to an
