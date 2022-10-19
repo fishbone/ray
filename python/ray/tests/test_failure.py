@@ -579,7 +579,7 @@ def test_no_warning_many_actor_tasks_queued_when_sequential(shutdown_only, sync:
                 "health_check_period_ms": 100,
                 "timeout_ms_task_wait_for_death_info": 100,
             },
-        }
+        },
     ],
     indirect=True,
 )
