@@ -46,6 +46,7 @@ void GcsHealthCheckManager::RemoveNode(const NodeID &node_id) {
 }
 
 void GcsHealthCheckManager::FailNode(const NodeID &node_id) {
+  RAY_LOG(WARNING) << "Node " << node_id << " is dead because the health check failed.";
   on_node_death_callback_(node_id);
   inflight_health_checks_.erase(node_id);
 }
