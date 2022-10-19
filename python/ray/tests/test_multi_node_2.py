@@ -43,7 +43,8 @@ def test_shutdown():
     "ray_start_cluster_head",
     [
         generate_system_config_map(
-            num_heartbeats_timeout=3, object_timeout_milliseconds=12345,
+            num_heartbeats_timeout=3,
+            object_timeout_milliseconds=12345,
             pull_based_healthcheck=False,
         ),
         generate_system_config_map(
@@ -51,8 +52,7 @@ def test_shutdown():
             health_check_failure_threshold=3,
             object_timeout_milliseconds=12345,
             pull_based_healthcheck=True,
-        )
-        
+        ),
     ],
     indirect=True,
 )
