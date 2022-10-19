@@ -19,11 +19,7 @@ GcsHealthCheckManager::GcsHealthCheckManager(
       period_ms_(period_ms),
       failure_threshold_(failure_threshold) {}
 
-GcsHealthCheckManager::~GcsHealthCheckManager() {
-  for (auto &[_, context] : inflight_health_checks_) {
-    context.StopHealthCheck();
-  }
-}
+GcsHealthCheckManager::~GcsHealthCheckManager() { inflight_health_checks_.clear(); }
 
 void GcsHealthCheckManager::RemoveNode(const NodeID &node_id) {
   io_service_.dispatch(
@@ -32,9 +28,7 @@ void GcsHealthCheckManager::RemoveNode(const NodeID &node_id) {
         if (iter == inflight_health_checks_.end()) {
           return;
         }
-        // Cancel the health check. The context will be released in
-        // the gRPC callback.
-        iter->second.StopHealthCheck();
+        inflight_health_checks_.erase(iter);
       },
       "GcsHealthCheckManager::RemoveNode");
 }
@@ -42,16 +36,6 @@ void GcsHealthCheckManager::RemoveNode(const NodeID &node_id) {
 void GcsHealthCheckManager::FailNode(const NodeID &node_id) {
   on_node_death_callback_(node_id);
   inflight_health_checks_.erase(node_id);
-}
-
-void GcsHealthCheckManager::HealthCheckContext::StopHealthCheck() {
-  if (context != nullptr) {
-    context->TryCancel();
-  } else {
-    // Cancel the health check.
-    RAY_CHECK(timer.cancel() == 1);
-    manager->inflight_health_checks_.erase(node_id);
-  }
 }
 
 void GcsHealthCheckManager::HealthCheckContext::StartHealthCheck() {
@@ -81,7 +65,7 @@ void GcsHealthCheckManager::HealthCheckContext::StartHealthCheck() {
             // Do another health check.
             timer.expires_from_now(boost::posix_time::milliseconds(manager->period_ms_));
             timer.async_wait([this](auto ec) {
-              if (ec) {
+              if (ec != boost::asio::error::operation_aborted) {
                 StartHealthCheck();
               }
             });
@@ -107,9 +91,15 @@ void GcsHealthCheckManager::AddNode(const rpc::GcsNodeInfo &node_info) {
   auto client = client_pool_.GetOrConnectByAddress(address);
   RAY_CHECK(client != nullptr);
   auto channel = client->GetChannel();
+  RAY_CHECK(channel != nullptr);
   auto node_id = NodeID::FromBinary(node_info.node_id());
-  RAY_CHECK(inflight_health_checks_.count(node_id) == 0);
-  inflight_health_checks_.emplace(node_id, HealthCheckContext(this, channel, node_id));
+  io_service_.dispatch(
+      [this, channel, node_id]() {
+        RAY_CHECK(inflight_health_checks_.count(node_id) == 0);
+        auto context = std::make_unique<HealthCheckContext>(this, channel, node_id);
+        inflight_health_checks_.emplace(std::make_pair(node_id, std::move(context)));
+      },
+      "GcsHealthCheckManager::AddNode");
 }
 
 }  // namespace gcs

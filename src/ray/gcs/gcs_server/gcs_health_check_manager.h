@@ -66,13 +66,17 @@ class GcsHealthCheckManager {
       stub = grpc::health::v1::Health::NewStub(channel);
       timer.expires_from_now(boost::posix_time::milliseconds(manager->initial_delay_ms_));
       timer.async_wait([this](auto ec) {
-        if (ec) {
+        if (ec != boost::asio::error::operation_aborted) {
           StartHealthCheck();
         }
       });
     }
-
-    void StopHealthCheck();
+    ~HealthCheckContext() {
+      timer.cancel();
+      if (context != nullptr) {
+        context->TryCancel();
+      }
+    }
 
    private:
     void StartHealthCheck();
@@ -93,7 +97,8 @@ class GcsHealthCheckManager {
   rpc::NodeManagerClientPool &client_pool_;
   std::function<void(const NodeID &)> on_node_death_callback_;
 
-  absl::flat_hash_map<NodeID, HealthCheckContext> inflight_health_checks_;
+  absl::flat_hash_map<NodeID, std::unique_ptr<HealthCheckContext>>
+      inflight_health_checks_;
 
   const int64_t initial_delay_ms_;
   const int64_t timeout_ms_;
