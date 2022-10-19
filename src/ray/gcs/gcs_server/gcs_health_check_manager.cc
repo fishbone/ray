@@ -5,14 +5,12 @@ namespace gcs {
 
 GcsHealthCheckManager::GcsHealthCheckManager(
     instrumented_io_context &io_service,
-    rpc::NodeManagerClientPool &client_pool,
     std::function<void(const NodeID &)> on_node_death_callback,
     int64_t initial_delay_ms,
     int64_t timeout_ms,
     int64_t period_ms,
     int64_t failure_threshold)
     : io_service_(io_service),
-      client_pool_(client_pool),
       on_node_death_callback_(on_node_death_callback),
       initial_delay_ms_(initial_delay_ms),
       timeout_ms_(timeout_ms),
@@ -75,24 +73,8 @@ void GcsHealthCheckManager::HealthCheckContext::StartHealthCheck() {
   });
 }
 
-void GcsHealthCheckManager::Initialize(const GcsInitData &gcs_init_data) {
-  for (const auto &item : gcs_init_data.Nodes()) {
-    if (item.second.state() == rpc::GcsNodeInfo::ALIVE) {
-      AddNode(item.second);
-    }
-  }
-}
-
-void GcsHealthCheckManager::AddNode(const rpc::GcsNodeInfo &node_info) {
-  rpc::Address address;
-  address.set_raylet_id(node_info.node_id());
-  address.set_ip_address(node_info.node_manager_address());
-  address.set_port(node_info.node_manager_port());
-  auto client = client_pool_.GetOrConnectByAddress(address);
-  RAY_CHECK(client != nullptr);
-  auto channel = client->GetChannel();
-  RAY_CHECK(channel != nullptr);
-  auto node_id = NodeID::FromBinary(node_info.node_id());
+void GcsHealthCheckManager::AddNode(const NodeID &node_id,
+                                    std::shared_ptr<grpc::Channel> channel) {
   io_service_.dispatch(
       [this, channel, node_id]() {
         RAY_CHECK(inflight_health_checks_.count(node_id) == 0);

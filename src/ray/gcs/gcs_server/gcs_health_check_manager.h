@@ -30,7 +30,6 @@ class GcsHealthCheckManager {
  public:
   GcsHealthCheckManager(
       instrumented_io_context &io_service,
-      rpc::NodeManagerClientPool &client_pool,
       std::function<void(const NodeID &)> on_node_death_callback,
       int64_t initial_delay_ms = RayConfig::instance().health_check_initial_delay_ms(),
       int64_t timeout_ms = RayConfig::instance().health_check_timeout_ms(),
@@ -39,13 +38,7 @@ class GcsHealthCheckManager {
 
   ~GcsHealthCheckManager();
 
-  /// Initialize with the gcs tables data synchronously.
-  /// This should be called when GCS server restarts after a failure.
-  ///
-  /// \param gcs_init_data.
-  void Initialize(const GcsInitData &gcs_init_data);
-
-  void AddNode(const rpc::GcsNodeInfo &node_info);
+  void AddNode(const NodeID &node_id, std::shared_ptr<grpc::Channel> channel);
 
   void RemoveNode(const NodeID &node_id);
 
@@ -94,7 +87,6 @@ class GcsHealthCheckManager {
   };
 
   instrumented_io_context &io_service_;
-  rpc::NodeManagerClientPool &client_pool_;
   std::function<void(const NodeID &)> on_node_death_callback_;
 
   absl::flat_hash_map<NodeID, std::unique_ptr<HealthCheckContext>>

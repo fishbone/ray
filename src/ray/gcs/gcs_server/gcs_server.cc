@@ -250,9 +250,18 @@ void GcsServer::InitGcsHeartbeatManager(const GcsInitData &gcs_init_data) {
   };
 
   if (RayConfig::instance().pull_based_healthcheck()) {
-    gcs_healthcheck_manager_ = std::make_unique<GcsHealthCheckManager>(
-        main_service_, *raylet_client_pool_, node_death_callback);
-    gcs_healthcheck_manager_->Initialize(gcs_init_data);
+    gcs_healthcheck_manager_ =
+        std::make_unique<GcsHealthCheckManager>(main_service_, node_death_callback);
+    for (const auto &item : gcs_init_data.Nodes()) {
+      if (item.second.state() == rpc::GcsNodeInfo::ALIVE) {
+        rpc::Address remote_address;
+        remote_address.set_raylet_id(item.second.node_id());
+        remote_address.set_ip_address(item.second.node_manager_address());
+        remote_address.set_port(item.second.node_manager_port());
+        auto raylet_client = raylet_client_pool_->GetOrConnectByAddress(remote_address);
+        gcs_healthcheck_manager_->AddNode(item.first, raylet_client->GetChannel());
+      }
+    }
   } else {
     gcs_heartbeat_manager_ = std::make_shared<GcsHeartbeatManager>(
         heartbeat_manager_io_service_, /*on_node_death_callback=*/node_death_callback);
@@ -613,17 +622,23 @@ void GcsServer::InstallEventListeners() {
     if (gcs_heartbeat_manager_) {
       gcs_heartbeat_manager_->AddNode(*node);
     }
+
+    rpc::Address address;
+    address.set_raylet_id(node->node_id());
+    address.set_ip_address(node->node_manager_address());
+    address.set_port(node->node_manager_port());
+
+    auto raylet_client = raylet_client_pool_->GetOrConnectByAddress(address);
+
     if (gcs_healthcheck_manager_) {
-      gcs_healthcheck_manager_->AddNode(*node);
+      RAY_CHECK(raylet_client != nullptr);
+      auto channel = raylet_client->GetChannel();
+      RAY_CHECK(channel != nullptr);
+      gcs_healthcheck_manager_->AddNode(node_id, channel);
     }
     cluster_task_manager_->ScheduleAndDispatchTasks();
-    if (RayConfig::instance().use_ray_syncer()) {
-      rpc::Address address;
-      address.set_raylet_id(node->node_id());
-      address.set_ip_address(node->node_manager_address());
-      address.set_port(node->node_manager_port());
 
-      auto raylet_client = raylet_client_pool_->GetOrConnectByAddress(address);
+    if (RayConfig::instance().use_ray_syncer()) {
       ray_syncer_->Connect(raylet_client->GetChannel());
     } else {
       gcs_ray_syncer_->AddNode(*node);
