@@ -191,6 +191,7 @@ void GcsServer::DoStart(const GcsInitData &gcs_init_data) {
       [this] {
         RAY_LOG(INFO) << GetDebugState();
         PrintAsioStats();
+        PrintNullarCBMetrics();
       },
       /*ms*/ RayConfig::instance().event_stats_print_interval_ms(),
       "GCSServer.deadline_timer.debug_state_event_stats_print");
