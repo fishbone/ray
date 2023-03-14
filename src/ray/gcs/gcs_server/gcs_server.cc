@@ -14,10 +14,11 @@
 
 #include "ray/gcs/gcs_server/gcs_server.h"
 
-#include <fstream>
-#include <filesystem>
-
 #include <unistd.h>
+
+#include <filesystem>
+#include <fstream>
+
 #include "ray/common/asio/asio_util.h"
 #include "ray/common/asio/instrumented_io_context.h"
 #include "ray/common/network_util.h"
@@ -200,9 +201,9 @@ void GcsServer::DoStart(const GcsInitData &gcs_init_data) {
         auto p = std::filesystem::path(ss.str());
         size_t n = 0;
         size_t total = 0;
-        for(auto& f : std::filesystem::directory_iterator(p)) {
-          total+=1;
-          if(f.is_socket()) {
+        for (auto &f : std::filesystem::directory_iterator(p)) {
+          total += 1;
+          if (f.is_socket()) {
             n += 1;
           }
         }

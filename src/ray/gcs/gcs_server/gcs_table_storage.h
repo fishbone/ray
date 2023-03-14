@@ -27,7 +27,6 @@
 #define S2(x) S1(x)
 #define LOCATION __FILE__ " : " S2(__LINE__)
 
-
 namespace ray {
 namespace gcs {
 
@@ -45,25 +44,20 @@ using rpc::StoredConfig;
 using rpc::TaskSpec;
 using rpc::WorkerTableData;
 
-void RecordNullarCBMetrics(const std::string& key, size_t time);
+void RecordNullarCBMetrics(const std::string &key, size_t time);
 void PrintNullarCBMetrics();
 
-template<typename ...Args>
+template <typename... Args>
 struct NullaryCB {
   using F = std::function<void(Args...)>;
-  template<typename C>
-  NullaryCB(C _f)
-      : NullaryCB(std::move(_f), "") {}
+  template <typename C>
+  NullaryCB(C _f) : NullaryCB(std::move(_f), "") {}
 
-  template<typename C>
-  NullaryCB(C _f, const char* _name)
-      : f(std::move(_f)),
-        name(_name) {}
+  template <typename C>
+  NullaryCB(C _f, const char *_name) : f(std::move(_f)), name(_name) {}
 
-  template<typename C>
-  NullaryCB(C _f, std::string _name)
-      : f(std::move(_f)),
-        name(std::move(_name)) {}
+  template <typename C>
+  NullaryCB(C _f, std::string _name) : f(std::move(_f)), name(std::move(_name)) {}
 
   void operator()(Args... args) const {
     auto now = absl::Now();
@@ -73,9 +67,7 @@ struct NullaryCB {
     RecordNullarCBMetrics(table_name + "@" + name, ns_spent);
   }
 
-  operator bool() const {
-    return f != nullptr;
-  }
+  operator bool() const { return f != nullptr; }
 
   F f;
   std::string name;

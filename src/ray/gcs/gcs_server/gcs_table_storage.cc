@@ -11,10 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "absl/synchronization/mutex.h"
-
 #include "ray/gcs/gcs_server/gcs_table_storage.h"
 
+#include "absl/synchronization/mutex.h"
 #include "ray/common/id.h"
 #include "ray/common/status.h"
 #include "ray/gcs/callback.h"
@@ -22,30 +21,28 @@
 namespace ray {
 namespace gcs {
 
-
 static absl::Mutex mutex;
 static absl::flat_hash_map<std::string, std::pair<size_t, size_t>> stats;
 
 void PrintNullarCBMetrics() {
   absl::MutexLock _(&mutex);
   RAY_LOG(INFO) << "=== NullarCBMetrics Starts ===";
-  for(auto& item : stats) {
+  for (auto &item : stats) {
     // auto e = item.second;
     // RAY_LOG(INFO) << "Readed: " << key << ", " << e.first << ", " << e.second;
 
     auto [cnt, total] = item.second;
     RAY_CHECK(cnt != 0);
-    RAY_LOG(INFO) << "\t" << item.first
-                  << " cnt: " << cnt
+    RAY_LOG(INFO) << "\t" << item.first << " cnt: " << cnt
                   << " total_time_ms: " << (total / 1000000UL)
                   << " avg: " << (total / cnt) / 1000000UL;
   }
   RAY_LOG(INFO) << "=== NullarCBMetrics Ends ===";
 }
 
-void RecordNullarCBMetrics(const std::string& key, size_t time) {
+void RecordNullarCBMetrics(const std::string &key, size_t time) {
   absl::MutexLock _(&mutex);
-  auto& e = stats[key];
+  auto &e = stats[key];
   e.first += 1;
   e.second += time;
   // RAY_LOG(INFO) << "Recorded: " << key << ", " << e.first << ", " << e.second;
@@ -71,8 +68,8 @@ template <typename Key, typename Data>
 Status GcsTable<Key, Data>::Get(const Key &key,
                                 NullaryCB<Status, const boost::optional<Data>> callback) {
   callback.table_name = table_name_ + ".Get";
-  auto on_done = [callback = std::move(callback)](const Status &status,
-                                                  const boost::optional<std::string> &result) {
+  auto on_done = [callback = std::move(callback)](
+                     const Status &status, const boost::optional<std::string> &result) {
     if (!callback) {
       return;
     }
