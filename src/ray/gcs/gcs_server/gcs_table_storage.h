@@ -23,6 +23,11 @@
 #include "ray/gcs/store_client/redis_store_client.h"
 #include "src/ray/protobuf/gcs.pb.h"
 
+#define S1(x) #x
+#define S2(x) S1(x)
+#define LOCATION __FILE__ " : " S2(__LINE__)
+
+
 namespace ray {
 namespace gcs {
 
@@ -49,21 +54,23 @@ struct NullaryCB {
   template<typename C>
   NullaryCB(C _f)
       : NullaryCB(std::move(_f), "") {}
+
+  template<typename C>
+  NullaryCB(C _f, const char* _name)
+      : f(std::move(_f)),
+        name(_name) {}
+
   template<typename C>
   NullaryCB(C _f, std::string _name)
       : f(std::move(_f)),
-        name(std::move(name)) {}
+        name(std::move(_name)) {}
 
   void operator()(Args... args) const {
     auto now = absl::Now();
     f(std::move(args)...);
     auto end = absl::Now();
-    auto ms_spent = absl::ToInt64Milliseconds(end - now);
-    if(name.empty()) {
-      RecordNullarCBMetrics("UNKNOWN", ms_spent);
-    } else {
-      RecordNullarCBMetrics(name, ms_spent);
-    }
+    auto ns_spent = absl::ToInt64Nanoseconds(end - now);
+    RecordNullarCBMetrics(table_name + "@" + name, ns_spent);
   }
 
   operator bool() const {
@@ -72,8 +79,8 @@ struct NullaryCB {
 
   F f;
   std::string name;
+  std::string table_name;
 };
-
 
 /// \class GcsTable
 ///

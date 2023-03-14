@@ -15,7 +15,9 @@
 #include "ray/gcs/gcs_server/gcs_server.h"
 
 #include <fstream>
+#include <filesystem>
 
+#include <unistd.h>
 #include "ray/common/asio/asio_util.h"
 #include "ray/common/asio/instrumented_io_context.h"
 #include "ray/common/network_util.h"
@@ -192,6 +194,19 @@ void GcsServer::DoStart(const GcsInitData &gcs_init_data) {
         RAY_LOG(INFO) << GetDebugState();
         PrintAsioStats();
         PrintNullarCBMetrics();
+        auto pid = getpid();
+        std::stringstream ss;
+        ss << "/proc/" << pid << "/fd";
+        auto p = std::filesystem::path(ss.str());
+        size_t n = 0;
+        size_t total = 0;
+        for(auto& f : std::filesystem::directory_iterator(p)) {
+          total+=1;
+          if(f.is_socket()) {
+            n += 1;
+          }
+        }
+        RAY_LOG(INFO) << "File Opened == Total: " << total << ", Socket: " << n;
       },
       /*ms*/ RayConfig::instance().event_stats_print_interval_ms(),
       "GCSServer.deadline_timer.debug_state_event_stats_print");
@@ -644,6 +659,7 @@ void GcsServer::InstallEventListeners() {
         gcs_actor_manager_->OnNodeDead(node_id, node_ip_address);
         raylet_client_pool_->Disconnect(node_id);
         gcs_healthcheck_manager_->RemoveNode(node_id);
+        pubsub_handler_->OnSenderDied(node_id.Binary());
 
         if (!RayConfig::instance().use_ray_syncer()) {
           gcs_ray_syncer_->RemoveNode(*node);
@@ -668,6 +684,7 @@ void GcsServer::InstallEventListeners() {
                                          worker_failure_data->exit_detail(),
                                          creation_task_exception);
         gcs_placement_group_scheduler_->HandleWaitingRemovedBundles();
+        pubsub_handler_->OnSenderDied(worker_id.Binary());
       });
 
   // Install job event listeners.

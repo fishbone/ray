@@ -37,8 +37,8 @@ void PrintNullarCBMetrics() {
     RAY_CHECK(cnt != 0);
     RAY_LOG(INFO) << "\t" << item.first
                   << " cnt: " << cnt
-                  << " total_time_ms: " << total
-                  << " avg: " << total / cnt;
+                  << " total_time_ms: " << (total / 1000000UL)
+                  << " avg: " << (total / cnt) / 1000000UL;
   }
   RAY_LOG(INFO) << "=== NullarCBMetrics Ends ===";
 }
@@ -55,6 +55,7 @@ template <typename Key, typename Data>
 Status GcsTable<Key, Data>::Put(const Key &key,
                                 const Data &value,
                                 NullaryCB<Status> callback) {
+  callback.table_name = table_name_ + ".Put";
   return store_client_->AsyncPut(table_name_,
                                  key.Binary(),
                                  value.SerializeAsString(),
@@ -69,6 +70,7 @@ Status GcsTable<Key, Data>::Put(const Key &key,
 template <typename Key, typename Data>
 Status GcsTable<Key, Data>::Get(const Key &key,
                                 NullaryCB<Status, const boost::optional<Data>> callback) {
+  callback.table_name = table_name_ + ".Get";
   auto on_done = [callback = std::move(callback)](const Status &status,
                                                   const boost::optional<std::string> &result) {
     if (!callback) {
@@ -135,6 +137,7 @@ Status GcsTableWithJobId<Key, Data>::Put(const Key &key,
     absl::MutexLock lock(&mutex_);
     index_[GetJobIdFromKey(key)].insert(key);
   }
+  callback.table_name = this->table_name_ + ".JPut";
   return this->store_client_->AsyncPut(this->table_name_,
                                        key.Binary(),
                                        value.SerializeAsString(),
