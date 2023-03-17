@@ -1252,8 +1252,8 @@ void GcsActorManager::OnActorCreationSuccess(const std::shared_ptr<GcsActor> &ac
           [this, actor_id, actor_table_data, actor, reply](Status status) {
             RAY_CHECK_OK(gcs_publisher_->PublishActor(
                 actor_id, *GenActorDataOnlyWithStates(actor_table_data), nullptr));
-            // Invoke all callbacks for all registration requests of this actor (duplicated
-            // requests are included) and remove all of them from
+            // Invoke all callbacks for all registration requests of this actor
+            // (duplicated requests are included) and remove all of them from
             // actor_to_create_callbacks_.
             RunAndClearActorCreationCallbacks(actor, reply, Status::OK());
           },
