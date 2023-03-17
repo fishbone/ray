@@ -129,10 +129,8 @@ void InternalPubSubHandler::HandleGcsSubscriberCommandBatch(
   send_reply_callback(Status::OK(), nullptr, nullptr);
 }
 
-void InternalPubSubHandler::OnSenderDied(const std::string &sender_id) {
+void InternalPubSubHandler::RemoveSubscriberFrom(const std::string &sender_id) {
   auto iter = sender_to_subscribers_.find(sender_id);
-  RAY_LOG(INFO) << "WorkerDied: " << WorkerID::FromBinary(sender_id) << "\t"
-                << (iter == sender_to_subscribers_.end() ? 0UL : iter->second.size());
   if (iter == sender_to_subscribers_.end()) {
     return;
   }
