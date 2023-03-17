@@ -307,6 +307,7 @@ def test_gcs_connection_no_leak(ray_start_cluster):
     # Make sure the # of fds opened by the GCS dropped.
     wait_for_condition(lambda: get_gcs_num_of_connections() == curr_fds)
 
+
 @pytest.mark.parametrize(
     "call_ray_start",
     ["ray start --head --num-cpus=2"],

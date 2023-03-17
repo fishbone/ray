@@ -72,7 +72,8 @@ class RAY_EXPORT GcsClient : public std::enable_shared_from_this<GcsClient> {
   /// \param gcs_client_id The unique ID for the owner of this object.
   ///    This potentially will be used to tell GCS who is client connecting
   ///    to GCS.
-  explicit GcsClient(const GcsClientOptions &options, UniqueID gcs_client_id = UniqueID::FromRandom());
+  explicit GcsClient(const GcsClientOptions &options,
+                     UniqueID gcs_client_id = UniqueID::FromRandom());
 
   virtual ~GcsClient() { Disconnect(); };
 
