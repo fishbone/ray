@@ -345,3 +345,17 @@ def ray_deps_setup():
         # When you first run this tool, it'll recommend a sha256 hash to put here with a message like: "DEBUG: Rule 'hedron_compile_commands' indicated that a canonical reproducible form can be obtained by modifying arguments sha256 = ..."
         sha256 = "7fbbbc05c112c44e9b406612e6a7a7f4789a6918d7aacefef4c35c105286930c",
     )
+
+    auto_http_archive(
+        name = "libfabric",
+        url = "https://github.com/ofiwg/libfabric/releases/download/v1.18.0/libfabric-1.18.0.tar.bz2",
+        strip_prefix = True,
+        build_file = True,
+        sha256 = "912fb7c7b3cf2a91140520962b004a1c5d2f39184adbbd98ae5919b0178afd43",
+    )
+
+    auto_http_archive(
+        name = "benchmark",
+        url = "https://github.com/google/benchmark/archive/refs/tags/v1.7.1.tar.gz",
+        sha256="6430e4092653380d9dc4ccb45a1e2dc9259d581f4866dc0759713126056bc1d7",
+    )

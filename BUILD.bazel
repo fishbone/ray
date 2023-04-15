@@ -503,6 +503,30 @@ cc_library(
 )
 
 cc_binary(
+    name = "fi",
+    srcs = ["src/ray/rdma/fabric.cc"],
+    copts = COPTS + ["-g", "-ggdb"],
+    visibility = ["//java:__subpackages__"],
+    deps = [
+        "@libfabric//:libfabric",
+        "@boost//:asio",
+    ],
+    linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],
+)
+
+cc_binary(
+    name = "libfabric-hello",
+    srcs = ["src/hello.cpp"],
+    copts = COPTS + ["-g", "-ggdb", "-w"],
+    visibility = ["//java:__subpackages__"],
+    deps = [
+        "@libfabric//:libfabric",
+        "@boost//:algorithm",
+    ],
+    linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],
+)
+
+cc_binary(
     name = "raylet",
     srcs = ["src/ray/raylet/main.cc"],
     copts = COPTS,
@@ -711,6 +735,7 @@ cc_library(
         "@io_opencensus_cpp//opencensus/tags",
     ],
 )
+
 
 cc_library(
     name = "raylet_lib",
