@@ -1,55 +1,57 @@
-#include <memory>
-#include <mutex>
-#include <boost/asio.hpp>
-#include <string_view>
 #include <rdma/fabric.h>
+#include <rdma/fi_atomic.h>
+#include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>
-#include <rdma/fi_cm.h>
-#include <rdma/fi_tagged.h>
-#include <rdma/fi_rma.h>
-#include <rdma/fi_atomic.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_rma.h>
+#include <rdma/fi_tagged.h>
+
+#include <boost/asio.hpp>
+#include <chrono>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <string_view>
 #include <thread>
 #include <vector>
-#include <iostream>
-#include <chrono>
 
 using boost::asio::ip::tcp;
 #define MR_KEY 0xABCD
 namespace ray {
 namespace rdma {
 
-#define CHK_ERR(name, cond, err)                            \
-  do {                                                      \
-    if (cond) {                                             \
-      fprintf(stderr,"%s: %s\n", name, strerror(-(err)));   \
-      exit(1);                                              \
-    }                                                       \
+#define CHK_ERR(name, cond, err)                           \
+  do {                                                     \
+    if (cond) {                                            \
+      fprintf(stderr, "%s: %s\n", name, strerror(-(err))); \
+      exit(1);                                             \
+    }                                                      \
   } while (0)
 
-
-inline std::ostream& operator<<(std::ostream& os, const fi_info* i) {
+inline std::ostream &operator<<(std::ostream &os, const fi_info *i) {
   static std::mutex mutex;
   std::lock_guard<std::mutex> _(mutex);
   os << fi_tostr(i, FI_TYPE_INFO);
   return os;
 }
 
-inline void crash(const char* msg) {
+inline void crash(const char *msg) {
   perror(msg);
   std::exit(1);
 }
 
 class Fabric {
  public:
-  Fabric(){}
-  Fabric(const Fabric&) = delete;
-  Fabric& operator=(const Fabric&) = delete;
+  Fabric() {}
+  Fabric(const Fabric &) = delete;
+  Fabric &operator=(const Fabric &) = delete;
 
   void StartAsServer(int port) {
-    thread_ = std::make_unique<std::thread>([=]{
-      tcp::acceptor acceptor(io_context_, tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), port));
+    thread_ = std::make_unique<std::thread>([=] {
+      tcp::acceptor acceptor(
+          io_context_,
+          tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), port));
       for (;;) {
         tcp::socket socket(io_context_);
         acceptor.accept(socket);
@@ -58,36 +60,42 @@ class Fabric {
     });
   }
 
-  void Exchange(tcp::socket& socket) {
+  void Exchange(tcp::socket &socket) {
     char buff[64];
     size_t len = sizeof(buff);
     using namespace boost;
     system::error_code ignored_error;
     asio::write(socket, boost::asio::buffer(ep_addr_), ignored_error);
     len = asio::read(
-        socket, asio::buffer(buff, len),
-        asio::transfer_exactly(ep_addr_.size()));
+        socket, asio::buffer(buff, len), asio::transfer_exactly(ep_addr_.size()));
     AddPeer(buff);
 
     asio::write(socket, asio::buffer(&local_write_key_, sizeof(int64_t)), ignored_error);
-    asio::read(socket, asio::buffer(&remote_write_key_, sizeof(int64_t)), asio::transfer_exactly(sizeof(int64_t)));
+    asio::read(socket,
+               asio::buffer(&remote_write_key_, sizeof(int64_t)),
+               asio::transfer_exactly(sizeof(int64_t)));
 
-    asio::write(socket, asio::buffer(&local_write_addr_, sizeof(void*)), ignored_error);
-    asio::read(socket, asio::buffer(&remote_write_addr_, sizeof(void*)), asio::transfer_exactly(sizeof(void*)));
-
+    asio::write(socket, asio::buffer(&local_write_addr_, sizeof(void *)), ignored_error);
+    asio::read(socket,
+               asio::buffer(&remote_write_addr_, sizeof(void *)),
+               asio::transfer_exactly(sizeof(void *)));
 
     asio::write(socket, asio::buffer(&local_read_key_, sizeof(int64_t)), ignored_error);
-    asio::read(socket, asio::buffer(&remote_read_key_, sizeof(int64_t)), asio::transfer_exactly(sizeof(int64_t)));
+    asio::read(socket,
+               asio::buffer(&remote_read_key_, sizeof(int64_t)),
+               asio::transfer_exactly(sizeof(int64_t)));
 
-    asio::write(socket, asio::buffer(&local_read_addr_, sizeof(void*)), ignored_error);
-    asio::read(socket, asio::buffer(&remote_read_addr_, sizeof(void*)), asio::transfer_exactly(sizeof(void*)));
+    asio::write(socket, asio::buffer(&local_read_addr_, sizeof(void *)), ignored_error);
+    asio::read(socket,
+               asio::buffer(&remote_read_addr_, sizeof(void *)),
+               asio::transfer_exactly(sizeof(void *)));
 
     ShowPeers();
-
   }
 
   void ConnectToServer(int port) {
-    auto endpoint = tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), port);
+    auto endpoint =
+        tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), port);
     tcp::resolver resolver(io_context_);
 
     tcp::socket socket(io_context_);
@@ -97,10 +105,10 @@ class Fabric {
 
   void ShowPeers() {
     std::cout << fi_tostr(fi_, FI_TYPE_INFO) << std::endl;
-    for(auto& addr : peers_) {
+    for (auto &addr : peers_) {
       char buf[64];
       size_t len = sizeof(buf);
-      if(fi_av_lookup(av_, addr, buf, &len)) {
+      if (fi_av_lookup(av_, addr, buf, &len)) {
         crash("fi_av_lookup");
       }
       char str[128];
@@ -122,13 +130,12 @@ class Fabric {
     std::cout << "LocalReadKey: " << local_read_key_ << std::endl;
     std::cout << "LocalReadAddr: " << (uint64_t)read_buff_ << std::endl;
     std::cout << "LocalReadDesc: " << read_desc_ << std::endl;
-
   }
 
-  fi_addr_t AddPeer(const char* addr) {
+  fi_addr_t AddPeer(const char *addr) {
     fi_addr_t fi_addr;
     memset(&fi_addr, 0, sizeof(fi_addr));
-    if(fi_av_insert(av_, addr, 1, &fi_addr, 0, NULL) != 1) {
+    if (fi_av_insert(av_, addr, 1, &fi_addr, 0, NULL) != 1) {
       std::cout << "av_insert error" << std::endl;
       std::exit(1);
     }
@@ -136,7 +143,7 @@ class Fabric {
     return fi_addr;
   }
 
-  void InitInfo(const char* prov_name,
+  void InitInfo(const char *prov_name,
                 enum fi_ep_type ep_type,
                 uint64_t caps,
                 int mr_mode = FI_MR_UNSPEC) {
@@ -147,7 +154,7 @@ class Fabric {
     hints->fabric_attr->prov_name = strdup(prov_name);
     hints->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
     hints->domain_attr->mr_mode = mr_mode;
-    if(fi_getinfo(version, NULL, NULL, 0, hints, &fi_)) {
+    if (fi_getinfo(version, NULL, NULL, 0, hints, &fi_)) {
       crash("fi_getinfo");
     }
 
@@ -155,13 +162,13 @@ class Fabric {
   }
 
   void InitFabric() {
-    if(fi_fabric(fi_->fabric_attr, &fabric_, NULL)) {
+    if (fi_fabric(fi_->fabric_attr, &fabric_, NULL)) {
       crash("fi_fabric");
     }
   }
 
   void InitDomain() {
-    if(fi_domain(fabric_, fi_, &domain_, NULL)) {
+    if (fi_domain(fabric_, fi_, &domain_, NULL)) {
       crash("fi_domain failed");
     }
   }
@@ -170,52 +177,47 @@ class Fabric {
     fi_av_attr av_attr;
     std::memset(&av_attr, 0, sizeof(av_attr));
     av_attr.type = av_type;
-    if(fi_av_open(domain_, &av_attr, &av_, NULL)) {
+    if (fi_av_open(domain_, &av_attr, &av_, NULL)) {
       crash("fi_av_open");
     }
 
-    if(fi_ep_bind(ep_, &av_->fid, 0)) {
+    if (fi_ep_bind(ep_, &av_->fid, 0)) {
       crash("fi_ep_bind:av");
     }
   }
 
-  void InitCQ(size_t size,
-              enum fi_cq_format cq_format = FI_CQ_FORMAT_UNSPEC) {
+  void InitCQ(size_t size, enum fi_cq_format cq_format = FI_CQ_FORMAT_UNSPEC) {
     fi_cq_attr cq_attr;
     std::memset(&cq_attr, 0, sizeof(cq_attr));
-	cq_attr.format = cq_format;
-	cq_attr.size = size;
-    if(fi_cq_open(domain_, &cq_attr, &cq_, NULL)) {
+    cq_attr.format = cq_format;
+    cq_attr.size = size;
+    if (fi_cq_open(domain_, &cq_attr, &cq_, NULL)) {
       crash("fi_cq_open");
     }
 
-    if(fi_ep_bind(ep_, &cq_->fid, FI_SEND|FI_RECV)) {
+    if (fi_ep_bind(ep_, &cq_->fid, FI_SEND | FI_RECV)) {
       crash("fi_ep_bind:cq");
     }
   }
 
   void Finish() {
-    if(fi_enable(ep_)) {
+    if (fi_enable(ep_)) {
       crash("fi_enable");
     }
 
     size_t len = 64;
     ep_addr_.resize(len);
 
-    if(fi_getname(&ep_->fid, (char*)ep_addr_.data(), &len)) {
+    if (fi_getname(&ep_->fid, (char *)ep_addr_.data(), &len)) {
       crash("fi_getname");
     }
     ep_addr_.resize(len);
     AddPeer(ep_addr_.data());
   }
 
-  const char* GetWriteBuffer() {
-    return write_buff_;
-  }
+  const char *GetWriteBuffer() { return write_buff_; }
 
-  const char* GetReadBuffer() {
-    return read_buff_;
-  }
+  const char *GetReadBuffer() { return read_buff_; }
 
   std::string GetEpAddress() {
     char buff[64];
@@ -225,21 +227,30 @@ class Fabric {
   }
 
   void InitEndpoint() {
-    if(fi_endpoint(domain_, fi_, &ep_, NULL)) {
+    if (fi_endpoint(domain_, fi_, &ep_, NULL)) {
       crash("fi_endpoint");
     }
   }
 
   void RegisterMR(size_t len) {
-    write_buff_ = (char*)calloc(len, 1);
-    read_buff_ = (char*)calloc(len, 1);
+    write_buff_ = (char *)calloc(len, 1);
+    read_buff_ = (char *)calloc(len, 1);
 
-    if(fi_mr_reg(domain_, write_buff_, len, FI_WRITE | FI_REMOTE_WRITE, 0, MR_KEY, 0, &write_mr_, NULL)) {
+    if (fi_mr_reg(domain_,
+                  write_buff_,
+                  len,
+                  FI_WRITE | FI_REMOTE_WRITE,
+                  0,
+                  MR_KEY,
+                  0,
+                  &write_mr_,
+                  NULL)) {
       crash("RegistMR-W failed");
     }
 
     bool vitr_addr = false;
-    if(fi_->domain_attr->mr_mode == FI_MR_UNSPEC || (fi_->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+    if (fi_->domain_attr->mr_mode == FI_MR_UNSPEC ||
+        (fi_->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
       vitr_addr = true;
     }
 
@@ -247,7 +258,15 @@ class Fabric {
     local_write_key_ = fi_mr_key(write_mr_);
     local_write_addr_ = vitr_addr ? (uint64_t)write_buff_ : 0;
 
-    if(fi_mr_reg(domain_, read_buff_, len, FI_READ | FI_REMOTE_READ, 0, MR_KEY + 1, 0, &read_mr_, NULL)) {
+    if (fi_mr_reg(domain_,
+                  read_buff_,
+                  len,
+                  FI_READ | FI_REMOTE_READ,
+                  0,
+                  MR_KEY + 1,
+                  0,
+                  &read_mr_,
+                  NULL)) {
       crash("RegistMR-R failed");
     }
 
@@ -263,37 +282,43 @@ class Fabric {
       do {
         ret = fi_cq_read(cq_, &comp, 1);
         if (ret < 0 && ret != -FI_EAGAIN) {
-          std::cout << "CQ PULLING ERROR: " << ret << "\t" << fi_strerror(-ret) << std::endl;
+          std::cout << "CQ PULLING ERROR: " << ret << "\t" << fi_strerror(-ret)
+                    << std::endl;
           return;
         }
-        if(comp.flags & FI_READ) {
+        if (comp.flags & FI_READ) {
           std::cout << "CQ:FI_READ" << std::endl;
-        } else if(comp.flags & FI_WRITE) {
+        } else if (comp.flags & FI_WRITE) {
           std::cout << "CQ:FI_WRITE" << std::endl;
         }
-      } while(ret != 1);
+      } while (ret != 1);
     });
   }
 
-  void Write(const std::string& msg) {
+  void Write(const std::string &msg) {
     std::memcpy(write_buff_, msg.data(), msg.size());
     int err = 0;
     do {
-      err = fi_write(ep_, write_buff_, msg.size(), write_desc_, peers_[1], remote_write_addr_, remote_write_key_, NULL);
-      if(err == -EAGAIN) {
+      err = fi_write(ep_,
+                     write_buff_,
+                     msg.size(),
+                     write_desc_,
+                     peers_[1],
+                     remote_write_addr_,
+                     remote_write_key_,
+                     NULL);
+      if (err == -EAGAIN) {
         continue;
       }
-      if(err) {
+      if (err) {
         std::cout << err << ": writing error:" << fi_strerror(-err) << std::endl;
       } else {
         std::cout << "WriteOK" << std::endl;
       }
-    } while(err == -EAGAIN);
+    } while (err == -EAGAIN);
   }
 
-  std::string_view DeviceName() const {
-    return fi_->fabric_attr->name;
-  }
+  std::string_view DeviceName() const { return fi_->fabric_attr->name; }
 
   std::unique_ptr<std::thread> cq_runner_;
 
@@ -309,8 +334,8 @@ class Fabric {
   std::vector<fi_addr_t> peers_;
   std::unique_ptr<std::thread> poll_thread_;
 
-  fid_mr* write_mr_ = nullptr;
-  char* write_buff_ = nullptr;
+  fid_mr *write_mr_ = nullptr;
+  char *write_buff_ = nullptr;
   size_t write_buff_len_ = 0;
 
   int64_t local_write_key_ = 0;
@@ -319,10 +344,10 @@ class Fabric {
   int64_t remote_write_key_ = 0;
   uint64_t remote_write_addr_ = 0;
 
-  void* write_desc_ = nullptr;
+  void *write_desc_ = nullptr;
 
-  fid_mr* read_mr_ = nullptr;
-  char* read_buff_ = nullptr;
+  fid_mr *read_mr_ = nullptr;
+  char *read_buff_ = nullptr;
   size_t read_buff_len_ = 0;
 
   int64_t local_read_key_ = 0;
@@ -330,15 +355,15 @@ class Fabric {
   int64_t remote_read_key_ = 0;
   uint64_t remote_read_addr_ = 0;
 
-  void* read_desc_ = nullptr;
+  void *read_desc_ = nullptr;
   // Don't clear data
-  std::vector<void*> writing_;
+  std::vector<void *> writing_;
 };
 
-}
-}
+}  // namespace rdma
+}  // namespace ray
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   ray::rdma::Fabric fi;
   fi.InitInfo(argv[1], FI_EP_RDM, FI_RMA);
   fi.InitFabric();
@@ -349,26 +374,26 @@ int main(int argc, char* argv[]) {
   fi.Finish();
   fi.RegisterMR(64);
 
-  if(argc == 2) {
-    std::cout <<  "usage: fi prov port cli/ser" << std::endl;
+  if (argc == 2) {
+    std::cout << "usage: fi prov port cli/ser" << std::endl;
     std::exit(1);
   }
 
   auto port = std::atoi(argv[2]);
 
-  if(argc == 3) {
+  if (argc == 3) {
     fi.StartAsServer(port);
   } else {
     fi.ConnectToServer(port);
   }
   fi.PullCQ();
 
-  while(std::cin) {
+  while (std::cin) {
     std::string msg;
     std::getline(std::cin, msg);
-    if(msg == "") {
-      std::cout << "W: " <<fi.GetWriteBuffer() << std::endl;
-      std::cout << "R: " <<fi.GetReadBuffer() << std::endl;
+    if (msg == "") {
+      std::cout << "W: " << fi.GetWriteBuffer() << std::endl;
+      std::cout << "R: " << fi.GetReadBuffer() << std::endl;
     } else {
       fi.Write(msg);
     }
