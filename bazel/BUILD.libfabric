@@ -1,0 +1,23 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+
+configure_make(
+    name = "libfabric",
+    configure_in_place = True,
+    lib_source = ":all_srcs",
+    configure_options = [
+        "--enable-tcp",
+        "--enable-udp",
+        "--enable-efa",
+        "--enable-shm"
+    ],
+    args = [
+        "-j",
+    ],
+    visibility = ["//visibility:public"],
+)
