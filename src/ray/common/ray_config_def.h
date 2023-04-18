@@ -807,3 +807,5 @@ RAY_CONFIG(int64_t, raylet_liveness_self_check_interval_ms, 60000)
 // See https://github.com/ray-project/ray/pull/33976 for more
 // info.
 RAY_CONFIG(bool, kill_child_processes_on_worker_exit, true)
+
+RAY_CONFIG(std::string, rdma_prov_name, "efa")

@@ -61,6 +61,23 @@ cc_grpc_library(
     deps = ["//src/ray/protobuf:node_manager_cc_proto"],
 )
 
+cc_library(
+    name = "rdma",
+    srcs = [
+        "src/ray/rdma/fabric.cc",
+    ],
+    hdrs = [
+        "src/ray/rdma/fabric.h",
+    ],
+    strip_include_prefix = "src",
+    deps = [
+        "//src/ray/protobuf:common_cc_proto",
+        ":ray_common",
+        "@libfabric//:libfabric",
+    ],
+    linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],
+)
+
 # Node manager server and client.
 cc_library(
     name = "node_manager_rpc",
@@ -504,12 +521,13 @@ cc_library(
 
 cc_binary(
     name = "fi",
-    srcs = ["src/ray/rdma/fabric.cc"],
-    copts = COPTS + ["-g", "-ggdb"],
+    srcs = ["src/ray/rdma/test/fabric.cc"],
+    copts = COPTS + ["-g", "-ggdb", "-w"],
     visibility = ["//java:__subpackages__"],
     deps = [
         "@libfabric//:libfabric",
         "@boost//:asio",
+        "@boost//:interprocess",
     ],
     linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],
 )
@@ -783,6 +801,7 @@ cc_library(
         ":scheduler",
         ":stats_lib",
         ":worker_rpc",
+        ":rdma",
         "//src/ray/protobuf:common_cc_proto",
         "@boost//:asio",
         "@boost//:system",
@@ -2411,6 +2430,7 @@ cc_library(
         ":core_worker_lib",
         ":gcs",
         ":object_manager_rpc",
+        ":rdma",
         ":plasma_store_server_lib",
         ":ray_common",
         ":ray_util",

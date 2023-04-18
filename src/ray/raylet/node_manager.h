@@ -47,6 +47,8 @@
 #include "ray/common/bundle_spec.h"
 #include "ray/raylet/placement_group_resource_manager.h"
 #include "ray/raylet/worker_killing_policy.h"
+#include "ray/rdma/fabric.h"
+
 // clang-format on
 
 namespace ray {
@@ -171,6 +173,14 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
 
   std::optional<syncer::RaySyncMessage> CreateSyncMessage(
       int64_t after_version, syncer::MessageType message_type) const override;
+
+  std::string GetRDMAAddr() const {
+    if (fabric_.IsReady()) {
+      return fabric_.GetAddress();
+    } else {
+      return "";
+    }
+  }
 
   int GetObjectManagerPort() const { return object_manager_.GetServerPort(); }
 
@@ -838,6 +848,8 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
 
   /// Monitors and reports node memory usage and whether it is above threshold.
   std::unique_ptr<MemoryMonitor> memory_monitor_;
+
+  rdma::Fabric fabric_;
 };
 
 }  // namespace raylet

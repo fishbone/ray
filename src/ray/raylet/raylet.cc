@@ -94,6 +94,7 @@ Raylet::Raylet(instrumented_io_context &main_service,
                                                     resource_map.end());
   self_node_info_.set_start_time_ms(current_sys_time_ms());
   self_node_info_.set_is_head_node(is_head_node);
+  self_node_info_.set_rdma_addr(node_manager_.GetRDMAAddr());
 }
 
 Raylet::~Raylet() {}

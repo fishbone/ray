@@ -31,6 +31,7 @@
 #include "absl/time/clock.h"
 #include "ray/common/asio/instrumented_io_context.h"
 #include "ray/common/id.h"
+#include "ray/rdma/fabric.h"
 #include "ray/common/ray_config.h"
 #include "ray/common/status.h"
 #include "ray/object_manager/chunk_object_reader.h"
@@ -171,6 +172,7 @@ class ObjectManager : public ObjectManagerInterface,
   /// \param object_directory An object implementing the object directory interface.
   explicit ObjectManager(
       instrumented_io_context &main_service,
+      rdma::Fabric& fabric,
       const NodeID &self_node_id,
       const ObjectManagerConfig &config,
       IObjectDirectory *object_directory,
@@ -489,6 +491,8 @@ class ObjectManager : public ObjectManagerInterface,
   /// create the object in plasma. This is usually due to out-of-memory in
   /// plasma.
   size_t num_chunks_received_failed_due_to_plasma_ = 0;
+
+  rdma::Fabric& fabric_;
 };
 
 }  // namespace ray

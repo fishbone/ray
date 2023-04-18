@@ -179,6 +179,7 @@ NodeManager::NodeManager(instrumented_io_context &io_service,
           })),
       object_manager_(
           io_service,
+          fabric_,
           self_node_id,
           object_manager_config,
           object_directory_.get(),
@@ -427,6 +428,7 @@ NodeManager::NodeManager(instrumented_io_context &io_service,
   worker_pool_.Start();
   periodical_runner_.RunFnPeriodically([this]() { GCTaskFailureReason(); },
                                        RayConfig::instance().task_failure_entry_ttl_ms());
+  fabric_.Init(RayConfig::instance().rdma_prov_name().c_str());
 }
 
 ray::Status NodeManager::RegisterGcs() {
@@ -1000,7 +1002,11 @@ void NodeManager::NodeAdded(const GcsNodeInfo &node_info) {
   // Store address of the new node manager for rpc requests.
   remote_node_manager_addresses_[node_id] =
       std::make_pair(node_info.node_manager_address(), node_info.node_manager_port());
-
+  if(!node_info.rdma_addr().empty()) {
+    if(!fabric_.AddPeer(node_id, node_info.rdma_addr())) {
+      RAY_LOG(ERROR) << "Failed to add rdma from " << node_id << " as the peer";
+    }
+  }
   // Fetch resource info for the remote node and update cluster resource map.
   RAY_CHECK_OK(gcs_client_->NodeResources().AsyncGetResources(
       node_id,

@@ -55,6 +55,7 @@ ObjectStoreRunner::~ObjectStoreRunner() {
 
 ObjectManager::ObjectManager(
     instrumented_io_context &main_service,
+    rdma::Fabric &fabric,
     const NodeID &self_node_id,
     const ObjectManagerConfig &config,
     IObjectDirectory *object_directory,
@@ -106,7 +107,8 @@ ObjectManager::ObjectManager(
       restore_spilled_object_(restore_spilled_object),
       get_spilled_object_url_(get_spilled_object_url),
       pull_retry_timer_(*main_service_,
-                        boost::posix_time::milliseconds(config.timer_freq_ms)) {
+                        boost::posix_time::milliseconds(config.timer_freq_ms)),
+      fabric_(fabric) {
   RAY_CHECK(config_.rpc_service_threads_number > 0);
 
   push_manager_.reset(new PushManager(/* max_chunks_in_flight= */ std::max(
@@ -635,6 +637,9 @@ void ObjectManager::HandlePull(rpc::PullRequest request,
                                rpc::SendReplyCallback send_reply_callback) {
   ObjectID object_id = ObjectID::FromBinary(request.object_id());
   NodeID node_id = NodeID::FromBinary(request.node_id());
+  if(fabric_.IsReady()) {
+
+  }
   RAY_LOG(DEBUG) << "Received pull request from node " << node_id << " for object ["
                  << object_id << "].";
 
