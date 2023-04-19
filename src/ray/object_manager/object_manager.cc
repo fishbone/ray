@@ -464,45 +464,56 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
                                        const NodeID &node_id,
                                        std::shared_ptr<ChunkObjectReader> chunk_reader,
                                        bool from_disk) {
-  auto rpc_client = GetRpcClient(node_id);
-  if (!rpc_client) {
-    // Push is best effort, so do nothing here.
-    RAY_LOG(INFO)
-        << "Failed to establish connection for Push with remote object manager.";
-    return;
-  }
+  //////////////// FABRIC ///////////////////
+  rpc::FabricPushMeta push_meta;
+  auto& obj = chunk_reader->GetObject();
+  push_meta.set_obj_id(object_id.Binary());
+  push_meta.set_node_id(node_id.Binary());
+  push_meta.set_data_size(obj.GetDataSize());
+  push_meta.set_metadata_size(obj.GetMetadataSize());
+  *push_meta.mutable_owner_addr() = obj.GetOwnerAddress();
 
-  RAY_LOG(DEBUG) << "Sending object chunks of " << object_id << " to node " << node_id
-                 << ", number of chunks: " << chunk_reader->GetNumChunks()
-                 << ", total data size: " << chunk_reader->GetObject().GetObjectSize();
+  fabric_.Push(push_meta, [chunk_reader]() {});
 
-  auto push_id = UniqueID::FromRandom();
-  push_manager_->StartPush(
-      node_id, object_id, chunk_reader->GetNumChunks(), [=](int64_t chunk_id) {
-        rpc_service_.post(
-            [=]() {
-              // Post to the multithreaded RPC event loop so that data is copied
-              // off of the main thread.
-              SendObjectChunk(
-                  push_id,
-                  object_id,
-                  node_id,
-                  chunk_id,
-                  rpc_client,
-                  [=](const Status &status) {
-                    // Post back to the main event loop because the
-                    // PushManager is thread-safe.
-                    main_service_->post(
-                        [this, node_id, object_id]() {
-                          push_manager_->OnChunkComplete(node_id, object_id);
-                        },
-                        "ObjectManager.Push");
-                  },
-                  chunk_reader,
-                  from_disk);
-            },
-            "ObjectManager.Push");
-      });
+  // auto rpc_client = GetRpcClient(node_id);
+  // if (!rpc_client) {
+  //   // Push is best effort, so do nothing here.
+  //   RAY_LOG(INFO)
+  //       << "Failed to establish connection for Push with remote object manager.";
+  //   return;
+  // }
+
+  // RAY_LOG(DEBUG) << "Sending object chunks of " << object_id << " to node " << node_id
+  //                << ", number of chunks: " << chunk_reader->GetNumChunks()
+  //                << ", total data size: " << chunk_reader->GetObject().GetObjectSize();
+
+  // auto push_id = UniqueID::FromRandom();
+  // push_manager_->StartPush(
+  //     node_id, object_id, chunk_reader->GetNumChunks(), [=](int64_t chunk_id) {
+  //       rpc_service_.post(
+  //           [=]() {
+  //             // Post to the multithreaded RPC event loop so that data is copied
+  //             // off of the main thread.
+  //             SendObjectChunk(
+  //                 push_id,
+  //                 object_id,
+  //                 node_id,
+  //                 chunk_id,
+  //                 rpc_client,
+  //                 [=](const Status &status) {
+  //                   // Post back to the main event loop because the
+  //                   // PushManager is thread-safe.
+  //                   main_service_->post(
+  //                       [this, node_id, object_id]() {
+  //                         push_manager_->OnChunkComplete(node_id, object_id);
+  //                       },
+  //                       "ObjectManager.Push");
+  //                 },
+  //                 chunk_reader,
+  //                 from_disk);
+  //           },
+  //           "ObjectManager.Push");
+  //     });
 }
 
 void ObjectManager::SendObjectChunk(const UniqueID &push_id,

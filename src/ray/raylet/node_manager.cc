@@ -291,7 +291,8 @@ NodeManager::NodeManager(instrumented_io_context &io_service,
           RayConfig::instance().memory_usage_threshold(),
           RayConfig::instance().min_memory_free_bytes(),
           RayConfig::instance().memory_monitor_refresh_ms(),
-          CreateMemoryUsageRefreshCallback())) {
+          CreateMemoryUsageRefreshCallback())),
+      fabric_(io_service_) {
   RAY_LOG(INFO) << "Initializing NodeManager with ID " << self_node_id_;
   cluster_resource_scheduler_ = std::make_shared<ClusterResourceScheduler>(
       scheduling::NodeID(self_node_id_.Binary()),
@@ -1003,7 +1004,7 @@ void NodeManager::NodeAdded(const GcsNodeInfo &node_info) {
   remote_node_manager_addresses_[node_id] =
       std::make_pair(node_info.node_manager_address(), node_info.node_manager_port());
   if(!node_info.rdma_addr().empty()) {
-    if(!fabric_.AddPeer(node_id, node_info.rdma_addr())) {
+    if(!fabric_.AddPeer(node_id.Binary(), node_info.rdma_addr())) {
       RAY_LOG(ERROR) << "Failed to add rdma from " << node_id << " as the peer";
     }
   }

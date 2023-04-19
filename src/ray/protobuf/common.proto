@@ -832,3 +832,14 @@ message NamedActorInfo {
   string ray_namespace = 1;
   string name = 2;
 }
+
+
+message FabricPushMeta {
+  bytes obj_id = 1;
+  bytes node_id = 2;
+  uint64 metadata_size = 3;
+  uint64 data_size = 4;
+  Address owner_addr = 5;
+  int64 mem_addr = 6;
+  uint64 mem_key = 7;
+}

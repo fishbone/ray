@@ -35,7 +35,7 @@ class MemoryObjectReader : public IObjectReader {
   bool ReadFromMetadataSection(uint64_t offset,
                                uint64_t size,
                                char *output) const override;
-
+  void* GetDataAddr() const override;
  private:
   const plasma::ObjectBuffer object_buffer_;
   const rpc::Address owner_address_;

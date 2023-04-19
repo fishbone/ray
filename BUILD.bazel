@@ -73,6 +73,7 @@ cc_library(
     deps = [
         "//src/ray/protobuf:common_cc_proto",
         ":ray_common",
+        "@boost//:asio",
         "@libfabric//:libfabric",
     ],
     linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],

@@ -27,23 +27,18 @@ enum struct Tag : uint64_t {
   PULL_DONE = 1
 };
 
-using RawID = char[ObjectID::kLength];
-
-struct Payload {
-  RawID id;
-  int64_t addr;
-  uint64_t key;
-  size_t len;
-};
-
 struct FabricContext {
-  Payload data;
+  void ResetBuff() {
+    buff.resize(1024 * 2);
+  }
+
+  rpc::FabricPushMeta meta;
   fi_addr_t peer;
   fid_mr* mr;
+  std::function<void()> done_cb;
+  std::string buff;
 };
 
-
-static_assert(std::is_pod_v<FabricContext>);
 
 bool Fabric::Init(const char* prov) {
   RAY_LOG(INFO) << "Initialize RDMA with " << prov;
@@ -94,7 +89,7 @@ bool Fabric::IsReady() const {
   return ready_;
 }
 
-bool Fabric::AddPeer(const NodeID& node_id, const std::string& addr) {
+bool Fabric::AddPeer(const std::string& node_id, const std::string& addr) {
   RAY_CHECK(peers_.find(node_id) == peers_.end());
   fi_addr_t fi_addr;
   memset(&fi_addr, 0, sizeof(fi_addr));
@@ -109,40 +104,37 @@ bool Fabric::AddPeer(const NodeID& node_id, const std::string& addr) {
 
 void Fabric::InitWait(fi_addr_t fi_addr) {
   auto cxt = new FabricContext();
+  cxt->ResetBuff();
   cxt->peer = fi_addr;
-  RAY_CHECK(fi_trecv(ep_, &cxt->data, sizeof(cxt->data), NULL, fi_addr, (uint64_t)Tag::PULL_REQ, 0, cxt) != 0);
+  RAY_CHECK(fi_trecv(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, fi_addr, (uint64_t)Tag::PULL_REQ, 0, cxt) != 0);
 }
 
-bool Fabric::Push(
-    const NodeID& node_id,
-    const ObjectID& obj_id,
-    const char* message,
-    size_t len) {
+bool Fabric::Push(rpc::FabricPushMeta meta,
+                  std::function<void()> cb) {
+  const auto& node_id = meta.node_id();
   auto iter = peers_.find(node_id);
   if(iter == peers_.end()) {
     return false;
   }
 
   auto cxt = new FabricContext();
+  cxt->done_cb = cb;
 
   // Register MR
-  memcpy(cxt->data.id, obj_id.Data(), ObjectID::kLength);
-  cxt->data.addr = (int64_t) message;
-  cxt->data.len = len;
-
   RAY_CHECK(fi_mr_reg(domain_,
-                      message,
-                      len,
+                      (void*)meta.mem_addr(),
+                      meta.metadata_size() + meta.data_size(),
                       FI_REMOTE_READ,
                       0,
                       0,
                       0,
                       &cxt->mr, NULL) == 0);
-
-  cxt->data.key = fi_mr_key(cxt->mr);
+  cxt->meta = std::move(meta);
+  RAY_CHECK(cxt->meta.SerializeToString(&cxt->buff));
+  cxt->meta.set_mem_key(fi_mr_key(cxt->mr));
 
   cxt->peer = iter->second;
-  RAY_CHECK(fi_tsend(ep_, &cxt->data, sizeof(cxt->data), NULL, cxt->peer, (uint64_t)Tag::PULL_REQ, cxt) == 0);
+  RAY_CHECK(fi_tsend(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, cxt->peer, (uint64_t)Tag::PULL_REQ, cxt) == 0);
 
   return true;
 }
@@ -163,11 +155,12 @@ void Fabric::Start() {
         auto cxt = (FabricContext*)comp.op_context;
         RAY_CHECK(cxt);
         if(comp.flags & FI_RMA && comp.flags & FI_READ) {
-          RAY_CHECK(!fi_tsend(ep_, "", 0, NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, cxt));
+          RAY_CHECK(!fi_tsend(ep_, NULL, 0, NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, cxt));
         } else if(comp.flags & FI_TAGGED && comp.flags & FI_SEND) {
           switch((Tag)comp.tag) {
             case Tag::PULL_REQ:
-              RAY_CHECK(!fi_trecv(ep_, &cxt->data, sizeof(cxt->data), NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, 0, cxt));
+              cxt->ResetBuff();
+              RAY_CHECK(!fi_trecv(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, 0, cxt));
               break;
             case Tag::PULL_DONE:
               delete cxt;
@@ -177,13 +170,16 @@ void Fabric::Start() {
           }
         } else if (comp.flags & FI_TAGGED && comp.flags & FI_RECV) {
           switch((Tag)comp.tag) {
-            case Tag::PULL_REQ:
+            case Tag::PULL_REQ: {
               InitWait(cxt->peer);
-              // TODO get buffer
-              // buff = ...
-              // char* buff = NULL;
-              RAY_CHECK(fi_read(ep_, NULL, cxt->data.len, NULL, cxt->peer, cxt->data.addr, cxt->data.key, cxt) == 0);
+              cxt->buff.resize(comp.len);
+              io_context_.post([this, cxt] {
+                cxt->meta.ParseFromString(cxt->buff);
+                auto [data, len] = prepare_buf_(cxt->meta);
+                RAY_CHECK(fi_read(ep_, data, len, NULL, cxt->peer, cxt->meta.mem_addr(), cxt->meta.mem_key(), cxt) == 0);
+              });
               break;
+            }
             case Tag::PULL_DONE:
               PushDone(cxt);
               break;
@@ -201,11 +197,8 @@ void Fabric::Start() {
 void Fabric::PushDone(FabricContext* cxt) {
   // Close mr
   fi_close(&cxt->mr->fid);
-
-  if(pull_done_) {
-    ObjectID id;
-    memcpy((char*) id.Data(), cxt->data.id, sizeof(cxt->data.id));
-    pull_done_(id);
+  if(cxt->done_cb) {
+    io_context_.post(cxt->done_cb);
   }
   delete cxt;
 }
