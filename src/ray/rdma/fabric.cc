@@ -1,19 +1,28 @@
+#include "ray/rdma/fabric.h"
+
 #include <rdma/fi_cm.h>
 #include <rdma/fi_tagged.h>
 
-#include "ray/rdma/fabric.h"
 #include "ray/util/logging.h"
+#include <iostream>
 
+#define RAY_RDMA_ACTION(OP, ...)                                   \
+  do {                                                             \
+    int err = OP(__VA_ARGS__);                                     \
+    if (err == -FI_EAGAIN) {                                       \
+      continue;                                                    \
+    }                                                              \
+    RAY_CHECK(err == 0) << #OP << " failed: " << fi_strerror(err); \
+  } while (true)
 
-#define RAY_RDMA_INIT(OP, ...)                                          \
-  do {                                                                  \
-  int err = OP(__VA_ARGS__);                                            \
-  if (err) {                                                            \
-    RAY_LOG(ERROR) << "Init RDMA failed: " #OP << " " << strerror(-err); \
-    return false;                                                       \
-  }                                                                     \
-  }                                                                     \
-  while(false)
+#define RAY_RDMA_INIT(OP, ...)                                             \
+  do {                                                                     \
+    int err = OP(__VA_ARGS__);                                             \
+    if (err) {                                                             \
+      RAY_LOG(ERROR) << "Init RDMA failed: " #OP << " " << strerror(-err); \
+      return false;                                                        \
+    }                                                                      \
+  } while (false)
 
 namespace ray {
 namespace rdma {
@@ -22,29 +31,24 @@ namespace rdma {
   START -> KEY EXCHANGED -> FINISHED
  */
 
-enum struct Tag : uint64_t {
-  PULL_REQ = 0,
-  PULL_DONE = 1
-};
+enum struct Tag : uint64_t { PULL_REQ = 0, PULL_DONE = 1 };
 
 struct FabricContext {
-  void ResetBuff() {
-    buff.resize(1024 * 2);
-  }
+  void ResetBuff() { buff.resize(16384); }
 
   rpc::FabricPushMeta meta;
+  Tag tag;
   fi_addr_t peer;
-  fid_mr* mr;
+  fid_mr *mr;
   std::function<void()> done_cb;
   std::string buff;
 };
 
-
-bool Fabric::Init(const char* prov) {
+bool Fabric::Init(const char *prov) {
   RAY_LOG(INFO) << "Initialize RDMA with " << prov;
   auto version = FI_VERSION(1, 18);
   auto hints = fi_allocinfo();
-  if(!hints) {
+  if (!hints) {
     RAY_LOG(ERROR) << "Init hints failed: ";
     return false;
   }
@@ -52,7 +56,7 @@ bool Fabric::Init(const char* prov) {
   hints->fabric_attr->prov_name = strdup(prov);
   hints->ep_attr->type = FI_EP_RDM;
   hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMM | FI_LOCAL_COMM;
-  hints->domain_attr->mr_mode = FI_RMA;
+  hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
   RAY_RDMA_INIT(fi_getinfo, version, NULL, NULL, 0, hints, &fi_);
   fi_freeinfo(hints);
   RAY_RDMA_INIT(fi_fabric, fi_->fabric_attr, &fabric_, NULL);
@@ -81,19 +85,18 @@ bool Fabric::Init(const char* prov) {
   return true;
 }
 
-const std::string& Fabric::GetAddress() const {
-  return src_addr_;
-}
+const std::string &Fabric::GetAddress() const { return src_addr_; }
 
-bool Fabric::IsReady() const {
-  return ready_;
-}
+bool Fabric::IsReady() const { return ready_; }
 
-bool Fabric::AddPeer(const std::string& node_id, const std::string& addr) {
+bool Fabric::AddPeer(const std::string &node_id, const std::string &addr) {
   RAY_CHECK(peers_.find(node_id) == peers_.end());
   fi_addr_t fi_addr;
   memset(&fi_addr, 0, sizeof(fi_addr));
-  if(fi_av_insert(av_, &addr, 1, &fi_addr, 0, NULL) != 1) {
+  char buff[1024];
+  size_t len = sizeof(buff);
+  RAY_LOG(INFO) << "Adding peer " << fi_av_straddr(av_, addr.c_str(), buff, &len);
+  if (fi_av_insert(av_, addr.c_str(), 1, &fi_addr, 0, NULL) != 1) {
     RAY_LOG(ERROR) << "Failed to rdma address for node: " << node_id;
     return false;
   }
@@ -106,14 +109,21 @@ void Fabric::InitWait(fi_addr_t fi_addr) {
   auto cxt = new FabricContext();
   cxt->ResetBuff();
   cxt->peer = fi_addr;
-  RAY_CHECK(fi_trecv(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, fi_addr, (uint64_t)Tag::PULL_REQ, 0, cxt) != 0);
+  RAY_RDMA_ACTION(fi_trecv,
+                  ep_,
+                  (char *)cxt->buff.c_str(),
+                  cxt->buff.size(),
+                  NULL,
+                  fi_addr,
+                  (uint64_t)Tag::PULL_REQ,
+                  0,
+                  cxt);
 }
 
-bool Fabric::Push(rpc::FabricPushMeta meta,
-                  std::function<void()> cb) {
-  const auto& node_id = meta.node_id();
+bool Fabric::Push(rpc::FabricPushMeta meta, std::function<void()> cb) {
+  const auto &node_id = meta.node_id();
   auto iter = peers_.find(node_id);
-  if(iter == peers_.end()) {
+  if (iter == peers_.end()) {
     return false;
   }
 
@@ -122,19 +132,28 @@ bool Fabric::Push(rpc::FabricPushMeta meta,
 
   // Register MR
   RAY_CHECK(fi_mr_reg(domain_,
-                      (void*)meta.mem_addr(),
+                      (void *)meta.mem_addr(),
                       meta.metadata_size() + meta.data_size(),
                       FI_REMOTE_READ,
                       0,
                       0,
                       0,
-                      &cxt->mr, NULL) == 0);
+                      &cxt->mr,
+                      NULL) == 0);
   cxt->meta = std::move(meta);
   RAY_CHECK(cxt->meta.SerializeToString(&cxt->buff));
   cxt->meta.set_mem_key(fi_mr_key(cxt->mr));
 
   cxt->peer = iter->second;
-  RAY_CHECK(fi_tsend(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, cxt->peer, (uint64_t)Tag::PULL_REQ, cxt) == 0);
+  cxt->tag = Tag::PULL_REQ;
+  RAY_RDMA_ACTION(fi_tsend,
+                  ep_,
+                  (char *)cxt->buff.c_str(),
+                  cxt->buff.size(),
+                  NULL,
+                  cxt->peer,
+                  (uint64_t)cxt->tag,
+                  cxt);
 
   return true;
 }
@@ -145,85 +164,108 @@ void Fabric::Start() {
     fi_cq_tagged_entry comps[MAX_POLL_CNT];
     do {
       auto ret = fi_cq_read(cq_, &comps, MAX_POLL_CNT);
-      if(ret == 0 || ret == -FI_EAGAIN) {
+      if (ret == 0 || ret == -FI_EAGAIN) {
         continue;
       }
 
       RAY_CHECK(ret >= 0);
-      for(auto i = 0; i < ret; ++i) {
-        auto& comp = comps[i];
-        auto cxt = (FabricContext*)comp.op_context;
+      for (auto i = 0; i < ret; ++i) {
+        auto &comp = comps[i];
+        std::cout << "CQ_FLAG: " << fi_tostr(&comp.flags, FI_TYPE_CQ_EVENT_FLAGS) << std::endl;
+
+        auto cxt = (FabricContext *)comp.op_context;
         RAY_CHECK(cxt);
-        if(comp.flags & FI_RMA && comp.flags & FI_READ) {
-          RAY_CHECK(!fi_tsend(ep_, NULL, 0, NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, cxt));
-        } else if(comp.flags & FI_TAGGED && comp.flags & FI_SEND) {
-          switch((Tag)comp.tag) {
-            case Tag::PULL_REQ:
-              cxt->ResetBuff();
-              RAY_CHECK(!fi_trecv(ep_, (char*)cxt->buff.c_str(), cxt->buff.size(), NULL, cxt->peer, (uint64_t)Tag::PULL_DONE, 0, cxt));
-              break;
-            case Tag::PULL_DONE:
-              delete cxt;
-              break;
-            default:
-              RAY_LOG(FATAL) << "Unknown tag: " << comp.tag;
+        if (comp.flags & FI_RMA && comp.flags & FI_READ) {
+          cxt->tag = Tag::PULL_DONE;
+          RAY_RDMA_ACTION(
+              fi_tsend, ep_, NULL, 0, NULL, cxt->peer, (uint64_t)cxt->tag, cxt);
+          io_context_.post(std::bind(pull_done_, cxt->meta.obj_id()));
+        } else if (comp.flags & FI_TAGGED && comp.flags & FI_SEND) {
+          switch ((Tag)cxt->tag) {
+          case Tag::PULL_REQ:
+            cxt->ResetBuff();
+            RAY_RDMA_ACTION(fi_trecv,
+                            ep_,
+                            (char *)cxt->buff.c_str(),
+                            cxt->buff.size(),
+                            NULL,
+                            cxt->peer,
+                            (uint64_t)Tag::PULL_DONE,
+                            0,
+                            cxt);
+            break;
+          case Tag::PULL_DONE:
+            delete cxt;
+            break;
+          default:
+            RAY_LOG(FATAL) << "Unknown tag: " << comp.tag;
+            break;
           }
         } else if (comp.flags & FI_TAGGED && comp.flags & FI_RECV) {
-          switch((Tag)comp.tag) {
-            case Tag::PULL_REQ: {
-              InitWait(cxt->peer);
-              cxt->buff.resize(comp.len);
-              io_context_.post([this, cxt] {
-                cxt->meta.ParseFromString(cxt->buff);
-                auto [data, len] = prepare_buf_(cxt->meta);
-                RAY_CHECK(fi_read(ep_, data, len, NULL, cxt->peer, cxt->meta.mem_addr(), cxt->meta.mem_key(), cxt) == 0);
-              });
-              break;
-            }
-            case Tag::PULL_DONE:
-              PushDone(cxt);
-              break;
-            default:
-              RAY_LOG(FATAL) << "Unknown tag: " << comp.tag;
+          switch ((Tag)comp.tag) {
+          case Tag::PULL_REQ: {
+            InitWait(cxt->peer);
+            cxt->buff.resize(comp.len);
+            io_context_.post([this, cxt] {
+              cxt->meta.ParseFromString(cxt->buff);
+              auto [data, len] = prepare_buf_(cxt->meta);
+              RAY_RDMA_ACTION(fi_read,
+                              ep_,
+                              data,
+                              len,
+                              NULL,
+                              cxt->peer,
+                              cxt->meta.mem_addr(),
+                              cxt->meta.mem_key(),
+                              cxt);
+            });
+            break;
+          }
+          case Tag::PULL_DONE:
+            PushDone(cxt);
+            break;
+          default:
+            RAY_LOG(FATAL) << "Unknown tag: " << comp.tag;
+            break;
           }
         } else {
-          RAY_LOG(FATAL) << "Unprocessed tag: " << comp.tag << " or flags: " << comp.flags;
+          RAY_LOG(FATAL) << "Unprocessed tag: " << comp.tag
+                         << " or flags: " << comp.flags;
         }
       }
-    } while(true);
+    } while (true);
   });
 }
 
-void Fabric::PushDone(FabricContext* cxt) {
+void Fabric::PushDone(FabricContext *cxt) {
   // Close mr
   fi_close(&cxt->mr->fid);
-  if(cxt->done_cb) {
+  if (cxt->done_cb) {
     io_context_.post(cxt->done_cb);
   }
   delete cxt;
 }
 
 Fabric::~Fabric() {
-  if(ep_) {
+  if (ep_) {
     fi_close(&ep_->fid);
   }
-  if(cq_) {
+  if (cq_) {
     fi_close(&cq_->fid);
   }
-  if(av_) {
+  if (av_) {
     fi_close(&av_->fid);
   }
-  if(domain_) {
+  if (domain_) {
     fi_close(&domain_->fid);
   }
-  if(fabric_) {
+  if (fabric_) {
     fi_close(&fabric_->fid);
   }
-  if(fi_) {
+  if (fi_) {
     fi_freeinfo(fi_);
   }
 }
 
-
-}
-}
+}  // namespace rdma
+}  // namespace ray

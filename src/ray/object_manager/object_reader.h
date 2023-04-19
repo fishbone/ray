@@ -53,8 +53,6 @@ class IObjectReader {
   virtual bool ReadFromMetadataSection(uint64_t offset,
                                        uint64_t size,
                                        char *output) const = 0;
-  virtual void* GetDataAddr() const {
-    return nullptr;
-  }
+  virtual void *GetDataAddr() const { return nullptr; }
 };
 }  // namespace ray

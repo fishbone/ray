@@ -41,9 +41,7 @@ bool MemoryObjectReader::ReadFromDataSection(uint64_t offset,
   return true;
 }
 
-void* MemoryObjectReader::GetDataAddr() const {
-  return object_buffer_.data->Data();
-}
+void *MemoryObjectReader::GetDataAddr() const { return object_buffer_.data->Data(); }
 
 bool MemoryObjectReader::ReadFromMetadataSection(uint64_t offset,
                                                  uint64_t size,

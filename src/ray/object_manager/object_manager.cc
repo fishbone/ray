@@ -152,6 +152,29 @@ ObjectManager::ObjectManager(
 
   // Start object manager rpc server and send & receive request threads
   StartRpcService();
+  fabric_.SetCB(
+      [this](const std::string &obj) {
+        auto id = ObjectID::FromBinary(obj);
+        RAY_CHECK_OK(buffer_pool_store_client_->Seal(id));
+        RAY_CHECK_OK(buffer_pool_store_client_->Release(id));
+      },
+      [this](const rpc::FabricPushMeta &m) -> std::pair<char *, size_t> {
+        auto obj_id = ObjectID::FromBinary(m.obj_id());
+        if (!pull_manager_->IsObjectActive(obj_id)) {
+          num_chunks_received_cancelled_++;
+          return std::make_pair(nullptr, 0);
+        }
+        std::shared_ptr<Buffer> data;
+        RAY_CHECK_OK(buffer_pool_store_client_->CreateAndSpillIfNeeded(
+            obj_id,
+            m.owner_addr(),
+            m.data_size(),
+            nullptr,
+            m.metadata_size(),
+            &data,
+            plasma::flatbuf::ObjectSource::ReceivedFromRemoteRaylet));
+        return std::make_pair((char *)data->Data(), data->Size());
+      });
 }
 
 ObjectManager::~ObjectManager() { StopRpcService(); }
@@ -466,13 +489,13 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
                                        bool from_disk) {
   //////////////// FABRIC ///////////////////
   rpc::FabricPushMeta push_meta;
-  auto& obj = chunk_reader->GetObject();
+  auto &obj = chunk_reader->GetObject();
   push_meta.set_obj_id(object_id.Binary());
   push_meta.set_node_id(node_id.Binary());
   push_meta.set_data_size(obj.GetDataSize());
   push_meta.set_metadata_size(obj.GetMetadataSize());
   *push_meta.mutable_owner_addr() = obj.GetOwnerAddress();
-
+  push_meta.set_mem_addr((int64_t)obj.GetDataAddr());
   fabric_.Push(push_meta, [chunk_reader]() {});
 
   // auto rpc_client = GetRpcClient(node_id);
@@ -648,8 +671,7 @@ void ObjectManager::HandlePull(rpc::PullRequest request,
                                rpc::SendReplyCallback send_reply_callback) {
   ObjectID object_id = ObjectID::FromBinary(request.object_id());
   NodeID node_id = NodeID::FromBinary(request.node_id());
-  if(fabric_.IsReady()) {
-
+  if (fabric_.IsReady()) {
   }
   RAY_LOG(DEBUG) << "Received pull request from node " << node_id << " for object ["
                  << object_id << "].";
