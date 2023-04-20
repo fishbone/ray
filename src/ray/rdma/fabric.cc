@@ -136,7 +136,7 @@ void Fabric::Start() {
       if (ret == 0 || ret == -FI_EAGAIN) {
         continue;
       }
-      RAY_CHECK(ret > 0);
+      RAY_CHECK(ret > 0) << fi_strerror(ret) << ", error_code=" << ret;
 
       for(int i = 0; i < ret; ++i) {
         auto &comp = comps[i];
