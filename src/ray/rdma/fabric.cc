@@ -5,7 +5,7 @@
 
 #include "ray/util/logging.h"
 #include <iostream>
-
+#include <functional>
 size_t kBuffSize = 4096;
 
 #define RAY_RDMA_ACTION(OP, ...)                                   \
@@ -31,21 +31,8 @@ size_t kBuffSize = 4096;
 namespace ray {
 namespace rdma {
 
-/*
-  START -> KEY EXCHANGED -> FINISHED
- */
-
-enum struct Tag : uint64_t { PULL_REQ = 1, PULL_DONE = 2 };
-
-struct FabricContext {
-  void ResetBuff() { buff.resize(kBuffSize); }
-
-  rpc::FabricPushMeta meta;
-  Tag tag;
-  fi_addr_t peer;
-  fid_mr *mr;
-  std::function<void()> done_cb;
-  std::string buff;
+struct Context {
+  std::function<void()> cb;
 };
 
 bool Fabric::Init(const char *prov) {
@@ -73,7 +60,7 @@ bool Fabric::Init(const char *prov) {
   RAY_RDMA_INIT(fi_ep_bind, ep_, &av_->fid, 0);
   fi_cq_attr cq_attr;
   std::memset(&cq_attr, 0, sizeof(cq_attr));
-  cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+  cq_attr.format = FI_CQ_FORMAT_MSG;
   cq_attr.size = 1024 * 1024;
   RAY_RDMA_INIT(fi_cq_open, domain_, &cq_attr, &cq_, NULL);
   RAY_RDMA_INIT(fi_ep_bind, ep_, &cq_->fid, FI_RECV | FI_SEND);
@@ -113,8 +100,10 @@ void Fabric::Read(const std::string& dest,
                   uint64_t mem_addr,
                   uint64_t mem_key,
                   std::function<void()> cb) {
-  auto cxt = new std::function<void()>(std::move(cb));
-  RAY_CHECK(peers_.find(node_id) != peers_.end());
+  auto cxt = new Context();
+  cxt->cb = std::move(cb);
+
+  RAY_CHECK(peers_.find(dest) != peers_.end());
   auto peer_addr = peers_[dest];
   int err = 0;
   do {
@@ -135,69 +124,13 @@ bool Fabric::AddPeer(const std::string &node_id, const std::string &addr) {
     return false;
   }
   peers_[node_id] = fi_addr;
-  InitWait(fi_addr);
-  return true;
-}
-
-void Fabric::InitWait(fi_addr_t fi_addr) {
-  auto cxt = new FabricContext();
-  cxt->ResetBuff();
-  cxt->peer = fi_addr;
-  cxt->tag = Tag::PULL_REQ;
-  RAY_RDMA_ACTION(fi_trecv,
-                  ep_,
-                  (char *)cxt->buff.c_str(),
-                  cxt->buff.size(),
-                  NULL,
-                  fi_addr,
-                  (uint64_t)Tag::PULL_REQ,
-                  0,
-                  cxt);
-}
-
-bool Fabric::Push(rpc::FabricPushMeta meta, std::function<void()> cb) {
-  const auto &node_id = meta.node_id();
-  auto iter = peers_.find(node_id);
-  if (iter == peers_.end()) {
-    return false;
-  }
-
-  auto cxt = new FabricContext();
-  cxt->done_cb = cb;
-
-  // Register MR
-  RAY_CHECK(fi_mr_reg(domain_,
-                      (void *)meta.mem_addr(),
-                      meta.metadata_size() + meta.data_size(),
-                      FI_REMOTE_READ,
-                      0,
-                      0,
-                      0,
-                      &cxt->mr,
-                      NULL) == 0);
-  cxt->meta = std::move(meta);
-  RAY_CHECK(cxt->meta.SerializeToString(&cxt->buff));
-  cxt->meta.set_mem_key(fi_mr_key(cxt->mr));
-
-  cxt->peer = iter->second;
-  cxt->tag = Tag::PULL_REQ;
-  RAY_CHECK(cxt->buff.size() <= kBuffSize);
-  RAY_RDMA_ACTION(fi_tsend,
-                  ep_,
-                  (char *)cxt->buff.c_str(),
-                  cxt->buff.size(),
-                  NULL,
-                  cxt->peer,
-                  (uint64_t)cxt->tag,
-                  cxt);
-
   return true;
 }
 
 void Fabric::Start() {
   pulling_ = std::make_unique<std::thread>([this] {
     const size_t MAX_POLL_CNT = 10;
-    fi_cq_tagged_entry comps[MAX_POLL_CNT];
+    fi_cq_msg_entry comps[MAX_POLL_CNT];
     do {
       auto ret = fi_cq_read(cq_, comps, MAX_POLL_CNT);
       if (ret == 0 || ret == -FI_EAGAIN) {
@@ -207,9 +140,10 @@ void Fabric::Start() {
 
       for(int i = 0; i < ret; ++i) {
         auto &comp = comps[i];
+        std::cout << "RDMA FLAGS: " << comp.len << "\t" << fi_tostr(&comp.flags, FI_TYPE_CQ_EVENT_FLAGS) << std::endl;
         if(comp.op_context) {
-          auto cxt = (std::function<void>*)comp.op_context;
-          io_context_.post(std::move(*cxt));
+          auto* cxt = (Context*)comp.op_context;
+          io_context_.post(std::move(std::move(cxt->cb)));
           delete cxt;
         }
       }
