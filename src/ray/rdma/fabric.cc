@@ -233,7 +233,7 @@ void Fabric::Start() {
                          << " or flags: " << comp.flags;
         }
       }
-    } while (true);
+    } while (ready_);
   });
 }
 
@@ -247,6 +247,10 @@ void Fabric::PushDone(FabricContext *cxt) {
 }
 
 Fabric::~Fabric() {
+  ready_ = false;
+  if(pulling_) {
+    pulling_->join();
+  }
   if (ep_) {
     fi_close(&ep_->fid);
   }
