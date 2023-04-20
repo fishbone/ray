@@ -37,6 +37,9 @@ message PushRequest {
   uint64 metadata_size = 7;
   // The chunk data
   bytes data = 8;
+  // rma related
+  uint64 mem_addr = 9;
+  int64 mem_key = 10;
 }
 
 message PullRequest {
@@ -55,8 +58,6 @@ message PushReply {
 }
 
 message PullReply {
-  int64 rdma_addr = 1;
-  uint64 key = 2;
 }
 
 message FreeObjectsReply {

@@ -152,29 +152,6 @@ ObjectManager::ObjectManager(
 
   // Start object manager rpc server and send & receive request threads
   StartRpcService();
-  fabric_.SetCB(
-      [this](const std::string &obj) {
-        auto id = ObjectID::FromBinary(obj);
-        RAY_CHECK_OK(buffer_pool_store_client_->Seal(id));
-        RAY_CHECK_OK(buffer_pool_store_client_->Release(id));
-      },
-      [this](const rpc::FabricPushMeta &m) -> std::pair<char *, size_t> {
-        auto obj_id = ObjectID::FromBinary(m.obj_id());
-        if (!pull_manager_->IsObjectActive(obj_id)) {
-          num_chunks_received_cancelled_++;
-          return std::make_pair(nullptr, 0);
-        }
-        std::shared_ptr<Buffer> data;
-        RAY_CHECK_OK(buffer_pool_store_client_->CreateAndSpillIfNeeded(
-            obj_id,
-            m.owner_addr(),
-            m.data_size(),
-            nullptr,
-            m.metadata_size(),
-            &data,
-            plasma::flatbuf::ObjectSource::ReceivedFromRemoteRaylet));
-        return std::make_pair((char *)data->Data(), data->Size());
-      });
 }
 
 ObjectManager::~ObjectManager() { StopRpcService(); }

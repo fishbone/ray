@@ -40,21 +40,14 @@ class Fabric {
 
   void Start();
 
-  // TODO: Better API
-  void SetCB(
-      std::function<void(const std::string &)> pull_done,
-      std::function<std::pair<char *, size_t>(const rpc::FabricPushMeta &)> prep_buf) {
-    prepare_buf_ = prep_buf;
-    pull_done_ = pull_done;
-  }
-
-  bool Push(rpc::FabricPushMeta meta, std::function<void()> cb);
-
+  std::tuple<uint64_t, int64_t, void*> RegisterMemory(const char* mem, size_t s);
+  void Read(const std::string& dest,
+            char* buff,
+            size_t len,
+            uint64_t mem_addr,
+            uint64_t mem_key,
+            std::function<void()> cb);
  private:
-  void PushDone(FabricContext *cxt);
-
-  void InitWait(fi_addr_t fi_addr);
-
   bool ready_ = false;
   std::string src_addr_;
   fi_info *fi_ = nullptr;
@@ -65,10 +58,6 @@ class Fabric {
   std::string ep_addr_;
   fid_cq *cq_ = nullptr;
   std::unordered_map<std::string, fi_addr_t> peers_;
-
-  std::function<std::pair<char *, size_t>(const rpc::FabricPushMeta &)> prepare_buf_;
-
-  std::function<void(const std::string &)> pull_done_;
 
   std::unique_ptr<std::thread> pulling_;
   boost::asio::io_context &io_context_;
