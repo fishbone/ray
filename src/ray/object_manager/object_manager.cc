@@ -527,34 +527,32 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
   push_request.set_data_size(chunk_reader->GetObject().GetObjectSize());
   push_request.set_metadata_size(chunk_reader->GetObject().GetMetadataSize());
   push_request.set_chunk_index(chunk_index);
+  void* mr = nullptr;
+  if(!fabric_.IsReady()) {
+    // read a chunk into push_request and handle errors.
+    auto optional_chunk = chunk_reader->GetChunk(chunk_index);
+    if (!optional_chunk.has_value()) {
+      RAY_LOG(DEBUG) << "Read chunk " << chunk_index << " of object " << object_id
+                     << " failed. It may have been evicted.";
+      on_complete(Status::IOError("Failed to read spilled object"));
+      return;
+    }
 
-  auto obj_mem = chunk_reader->GetObject().GetDataAddr();
+    push_request.set_data(std::move(optional_chunk.value()));
 
-  RAY_CHECK(obj_mem);
-  for(int i = 0; i < (int)chunk_reader->GetObject().GetObjectSize(); ++i) {
-    std::cout << (uint8_t)((char*)obj_mem)[i] << ", ";
+    if (from_disk) {
+      num_bytes_pushed_from_disk_ += push_request.data().length();
+    } else {
+      num_bytes_pushed_from_plasma_ += push_request.data().length();
+    }
+  } else {
+    auto obj_mem = chunk_reader->GetObject().GetDataAddr();
+    RAY_CHECK(obj_mem);
+    auto [fi_mem_addr, fi_mem_key, mr_] = fabric_.RegisterMemory((char*)obj_mem, chunk_reader->GetObject().GetObjectSize());
+    push_request.set_mem_addr(fi_mem_addr);
+    push_request.set_mem_key(fi_mem_key);
+    mr = mr_;
   }
-  std::cout << std::endl;
-
-  auto [fi_mem_addr, fi_mem_key, mr] = fabric_.RegisterMemory((char*)obj_mem, chunk_reader->GetObject().GetObjectSize());
-  push_request.set_mem_addr(fi_mem_addr);
-  push_request.set_mem_key(fi_mem_key);
-  // read a chunk into push_request and handle errors.
-  // auto optional_chunk = chunk_reader->GetChunk(chunk_index);
-  // if (!optional_chunk.has_value()) {
-  //   RAY_LOG(DEBUG) << "Read chunk " << chunk_index << " of object " << object_id
-  //                  << " failed. It may have been evicted.";
-  //   on_complete(Status::IOError("Failed to read spilled object"));
-  //   return;
-  // }
-
-  // push_request.set_data(std::move(optional_chunk.value()));
-
-  // if (from_disk) {
-  //   num_bytes_pushed_from_disk_ += push_request.data().length();
-  // } else {
-  //   num_bytes_pushed_from_plasma_ += push_request.data().length();
-  // }
 
   // record the time cost between send chunk and receive reply
   rpc::ClientCallback<rpc::PushReply> callback =
@@ -566,8 +564,9 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
                            << " failed due to" << status.message()
                            << ", chunk index: " << chunk_index;
         }
-
-        fi_close((fid*)mr);
+        if(fabric_.IsReady()) {
+          fi_close((fid*)mr);
+        }
 
         double end_time = absl::GetCurrentTimeNanos() / 1e9;
         HandleSendFinished(object_id, node_id, chunk_index, start_time, end_time, status);
@@ -582,45 +581,67 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
                                rpc::PushReply *reply,
                                rpc::SendReplyCallback send_reply_callback) {
   ObjectID object_id = ObjectID::FromBinary(request.object_id());
-  // NodeID node_id = NodeID::FromBinary(request.node_id());
+  NodeID node_id = NodeID::FromBinary(request.node_id());
 
   // Serialize.
-  // uint64_t chunk_index = request.chunk_index();
+  uint64_t chunk_index = request.chunk_index();
   uint64_t metadata_size = request.metadata_size();
   uint64_t data_size = request.data_size();
   const rpc::Address &owner_address = request.owner_address();
+  const std::string &data = request.data();
 
-  if (!pull_manager_->IsObjectActive(object_id)) {
-    num_chunks_received_cancelled_++;
-    // This object is no longer being actively pulled. Do not create the object.
-    send_reply_callback(Status::OK(), nullptr, nullptr);
-    return;
-  }
-  num_chunks_received_total_++;
-  std::shared_ptr<Buffer> data;
-  Status s = buffer_pool_store_client_->CreateAndSpillIfNeeded(
-      object_id,
-      owner_address,
-      static_cast<int64_t>(data_size),
-      nullptr,
-      static_cast<int64_t>(metadata_size),
-      &data,
-      plasma::flatbuf::ObjectSource::ReceivedFromRemoteRaylet);
-
-  auto cb = [this, data, data_size, send_reply_callback, object_id] {
-    std::cout << "RDMA RAED DONE" << std::endl;
-
-    RAY_CHECK_OK(buffer_pool_store_client_->Seal(object_id));
-    RAY_CHECK_OK(buffer_pool_store_client_->Release(object_id));
-    send_reply_callback(Status::OK(), nullptr, nullptr);
-
-    for(int i = 0; i < (int)data_size; ++i) {
-      std::cout << (uint8_t)data->Data()[i] << ", ";
+  if(fabric_.IsReady()) {
+    if (!pull_manager_->IsObjectActive(object_id)) {
+      num_chunks_received_cancelled_++;
+      // This object is no longer being actively pulled. Do not create the object.
+      send_reply_callback(Status::OK(), nullptr, nullptr);
+      return;
     }
-    std::cout << std::endl;
-  };
+    auto chunk_status = buffer_pool_.CreateChunk(
+        object_id, owner_address, data_size, metadata_size, chunk_index);
+    if (!pull_manager_->IsObjectActive(object_id)) {
+      num_chunks_received_cancelled_++;
+      // This object is no longer being actively pulled. Abort the object. We
+      // have to check again here because the pull manager runs in a different
+      // thread and the object may have been deactivated right before creating
+      // the chunk.
+      RAY_LOG(INFO) << "Aborting object creation because it is no longer actively pulled: "
+                    << object_id;
+      buffer_pool_.AbortCreate(object_id);
+      send_reply_callback(Status::OK(), nullptr, nullptr);
+      return;
+    }
 
-  fabric_.Read(request.node_id(), (char*)data->Data(), data->Size(), request.mem_addr(), request.mem_key(), std::move(cb));
+    num_chunks_received_total_++;
+    RAY_CHECK(chunk_index == 0);
+    auto buffer = buffer_pool_.GetChunkBuffer(object_id, data_size, metadata_size, chunk_index);
+    if(buffer == nullptr) {
+      send_reply_callback(Status::OK(), nullptr, nullptr);
+      return;
+    }
+    auto cb = [this, chunk_index, buffer, data_size, send_reply_callback, object_id] () mutable {
+      RAY_LOG(INFO) << "RDMA DONE: " << object_id;
+      send_reply_callback(Status::OK(), nullptr, nullptr);
+      buffer_pool_.ChunkFinished(object_id, chunk_index);
+    };
+    fabric_.Read(request.node_id(), buffer, data_size, request.mem_addr(), request.mem_key(), std::move(cb));
+  } else {
+    std::string json;
+    google::protobuf::util::MessageToJsonString(request, &json);
+    RAY_LOG(INFO) << "TCP: " << json;
+    bool success = ReceiveObjectChunk(
+        node_id, object_id, owner_address, data_size, metadata_size, chunk_index, data);
+    num_chunks_received_total_++;
+    if (!success) {
+      num_chunks_received_total_failed_++;
+      RAY_LOG(INFO) << "Received duplicate or cancelled chunk at index " << chunk_index
+                    << " of object " << object_id << ": overall "
+                    << num_chunks_received_total_failed_ << "/"
+                    << num_chunks_received_total_ << " failed";
+    }
+
+    send_reply_callback(Status::OK(), nullptr, nullptr);
+  }
 }
 
 bool ObjectManager::ReceiveObjectChunk(const NodeID &node_id,
@@ -674,8 +695,6 @@ void ObjectManager::HandlePull(rpc::PullRequest request,
                                rpc::SendReplyCallback send_reply_callback) {
   ObjectID object_id = ObjectID::FromBinary(request.object_id());
   NodeID node_id = NodeID::FromBinary(request.node_id());
-  if (fabric_.IsReady()) {
-  }
   RAY_LOG(DEBUG) << "Received pull request from node " << node_id << " for object ["
                  << object_id << "].";
 

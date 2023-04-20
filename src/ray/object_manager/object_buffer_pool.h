@@ -130,6 +130,11 @@ class ObjectBufferPool {
                   uint64_t chunk_index,
                   const std::string &data) LOCKS_EXCLUDED(pool_mutex_);
 
+  char* GetChunkBuffer(const ObjectID &object_id,
+                       uint64_t data_size,
+                       uint64_t metadata_size,
+                       uint64_t chunk_index);
+  void ChunkFinished(const ObjectID &object_id, uint64_t chunk_index);
   /// Free a list of objects from object store.
   ///
   /// \param object_ids the The list of ObjectIDs to be deleted.

@@ -140,20 +140,24 @@ void Fabric::Start() {
 
       for(int i = 0; i < ret; ++i) {
         auto &comp = comps[i];
-        std::cout << "RDMA FLAGS: " << comp.len << "\t" << fi_tostr(&comp.flags, FI_TYPE_CQ_EVENT_FLAGS) << std::endl;
+        RAY_LOG(DEBUG) << "RDMA FLAGS: " << comp.len << "\t" << fi_tostr(&comp.flags, FI_TYPE_CQ_EVENT_FLAGS);
         if(comp.op_context) {
           auto* cxt = (Context*)comp.op_context;
           io_context_.post(std::move(std::move(cxt->cb)));
           delete cxt;
         }
       }
-    } while (true);
+    } while (ready_);
   });
 }
 
 
 
 Fabric::~Fabric() {
+  ready_ = false;
+  if(pulling_) {
+    pulling_->join();
+  }
   if (ep_) {
     fi_close(&ep_->fid);
   }
