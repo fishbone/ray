@@ -471,7 +471,9 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
         << "Failed to establish connection for Push with remote object manager.";
     return;
   }
-  RAY_CHECK(chunk_reader->GetNumChunks() == 1);
+  if(fabric_.IsReady()) {
+    RAY_CHECK(chunk_reader->GetNumChunks() == 1);
+  }
 
   RAY_LOG(INFO) << "Sending object chunks of " << object_id << " to node " << node_id
                  << ", number of chunks: " << chunk_reader->GetNumChunks()
