@@ -181,12 +181,12 @@ bool SpilledObjectReader::ReadFromMetadataSection(uint64_t offset,
 }
 
 void *SpilledObjectReader::GetDataAddr() const {
-  if(!m_file_.is_open()) {
+  if (!m_file_.is_open()) {
     boost::iostreams::mapped_file_params params;
     m_file_.open(file_path_);
   }
 
-  auto ptr= (void*)(m_file_.data() + data_offset_);
+  auto ptr = (void *)(m_file_.data() + data_offset_);
   return ptr;
 }
 

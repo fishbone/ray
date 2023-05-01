@@ -147,7 +147,7 @@ void ObjectBufferPool::WriteChunk(const ObjectID &object_id,
   }
 }
 
-char* ObjectBufferPool::GetChunkBuffer(const ObjectID &object_id,
+char *ObjectBufferPool::GetChunkBuffer(const ObjectID &object_id,
                                        uint64_t data_size,
                                        uint64_t metadata_size,
                                        uint64_t chunk_index) {
@@ -165,7 +165,7 @@ char* ObjectBufferPool::GetChunkBuffer(const ObjectID &object_id,
   }
   RAY_CHECK(it->second.chunk_info.size() > chunk_index);
   auto &chunk_info = it->second.chunk_info.at(chunk_index);
-  return (char*)chunk_info.data;
+  return (char *)chunk_info.data;
 }
 
 void ObjectBufferPool::ChunkFinished(const ObjectID &object_id, uint64_t chunk_index) {

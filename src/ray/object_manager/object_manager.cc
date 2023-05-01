@@ -471,13 +471,13 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
         << "Failed to establish connection for Push with remote object manager.";
     return;
   }
-  if(fabric_.IsReady()) {
+  if (fabric_.IsReady()) {
     RAY_CHECK(chunk_reader->GetNumChunks() == 1);
   }
 
   RAY_LOG(INFO) << "Sending object chunks of " << object_id << " to node " << node_id
-                 << ", number of chunks: " << chunk_reader->GetNumChunks()
-                 << ", total data size: " << chunk_reader->GetObject().GetObjectSize();
+                << ", number of chunks: " << chunk_reader->GetNumChunks()
+                << ", total data size: " << chunk_reader->GetObject().GetObjectSize();
 
   auto push_id = UniqueID::FromRandom();
 
@@ -528,8 +528,8 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
   push_request.set_data_size(chunk_reader->GetObject().GetObjectSize());
   push_request.set_metadata_size(chunk_reader->GetObject().GetMetadataSize());
   push_request.set_chunk_index(chunk_index);
-  void* mr = nullptr;
-  if(!fabric_.IsReady()) {
+  void *mr = nullptr;
+  if (!fabric_.IsReady()) {
     // read a chunk into push_request and handle errors.
     auto optional_chunk = chunk_reader->GetChunk(chunk_index);
     if (!optional_chunk.has_value()) {
@@ -549,7 +549,8 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
   } else {
     auto obj_mem = chunk_reader->GetObject().GetDataAddr();
     RAY_CHECK(obj_mem);
-    auto [fi_mem_addr, fi_mem_key, mr_] = fabric_.RegisterMemory((char*)obj_mem, chunk_reader->GetObject().GetObjectSize());
+    auto [fi_mem_addr, fi_mem_key, mr_] = fabric_.RegisterMemory(
+        (char *)obj_mem, chunk_reader->GetObject().GetObjectSize());
     push_request.set_mem_addr(fi_mem_addr);
     push_request.set_mem_key(fi_mem_key);
     mr = mr_;
@@ -565,8 +566,8 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
                            << " failed due to" << status.message()
                            << ", chunk index: " << chunk_index;
         }
-        if(fabric_.IsReady()) {
-          fi_close((fid*)mr);
+        if (fabric_.IsReady()) {
+          fi_close((fid *)mr);
         }
 
         double end_time = absl::GetCurrentTimeNanos() / 1e9;
@@ -591,7 +592,7 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
   const rpc::Address &owner_address = request.owner_address();
   const std::string &data = request.data();
 
-  if(fabric_.IsReady()) {
+  if (fabric_.IsReady()) {
     if (!pull_manager_->IsObjectActive(object_id)) {
       num_chunks_received_cancelled_++;
       // This object is no longer being actively pulled. Do not create the object.
@@ -606,8 +607,9 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
       // have to check again here because the pull manager runs in a different
       // thread and the object may have been deactivated right before creating
       // the chunk.
-      RAY_LOG(INFO) << "Aborting object creation because it is no longer actively pulled: "
-                    << object_id;
+      RAY_LOG(INFO)
+          << "Aborting object creation because it is no longer actively pulled: "
+          << object_id;
       buffer_pool_.AbortCreate(object_id);
       send_reply_callback(Status::OK(), nullptr, nullptr);
       return;
@@ -615,16 +617,28 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
 
     num_chunks_received_total_++;
     RAY_CHECK(chunk_index == 0);
-    auto buffer = buffer_pool_.GetChunkBuffer(object_id, data_size, metadata_size, chunk_index);
-    if(buffer == nullptr) {
+    auto buffer =
+        buffer_pool_.GetChunkBuffer(object_id, data_size, metadata_size, chunk_index);
+    if (buffer == nullptr) {
       send_reply_callback(Status::OK(), nullptr, nullptr);
       return;
     }
-    auto cb = [this, chunk_index, buffer, data_size, send_reply_callback, object_id, metadata_size] () mutable {
+    auto cb = [this,
+               chunk_index,
+               buffer,
+               data_size,
+               send_reply_callback,
+               object_id,
+               metadata_size]() mutable {
       send_reply_callback(Status::OK(), nullptr, nullptr);
       buffer_pool_.ChunkFinished(object_id, chunk_index);
     };
-    fabric_.Read(request.node_id(), buffer, data_size, request.mem_addr(), request.mem_key(), std::move(cb));
+    fabric_.Read(request.node_id(),
+                 buffer,
+                 data_size,
+                 request.mem_addr(),
+                 request.mem_key(),
+                 std::move(cb));
   } else {
     bool success = ReceiveObjectChunk(
         node_id, object_id, owner_address, data_size, metadata_size, chunk_index, data);

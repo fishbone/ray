@@ -248,9 +248,8 @@ int main(int argc, char *argv[]) {
             std::min(std::max(2, num_cpus / 4), 8);
         object_manager_config.object_chunk_size =
             RayConfig::instance().object_manager_default_chunk_size();
-        if(!RayConfig::instance().rdma_prov_name().empty()) {
-          object_manager_config.object_chunk_size =
-              1024UL * 1024UL * 1024UL * 1024UL;
+        if (!RayConfig::instance().rdma_prov_name().empty()) {
+          object_manager_config.object_chunk_size = 1024UL * 1024UL * 1024UL * 1024UL;
         }
 
         RAY_LOG(DEBUG) << "Starting object manager with configuration: \n"

@@ -130,7 +130,7 @@ class ObjectBufferPool {
                   uint64_t chunk_index,
                   const std::string &data) LOCKS_EXCLUDED(pool_mutex_);
 
-  char* GetChunkBuffer(const ObjectID &object_id,
+  char *GetChunkBuffer(const ObjectID &object_id,
                        uint64_t data_size,
                        uint64_t metadata_size,
                        uint64_t chunk_index);

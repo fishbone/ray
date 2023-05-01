@@ -17,10 +17,9 @@
 #include <gtest/gtest_prod.h>
 
 #include <string>
-#include "boost/iostreams/device/mapped_file.hpp"
-
 
 #include "absl/types/optional.h"
+#include "boost/iostreams/device/mapped_file.hpp"
 #include "ray/object_manager/object_reader.h"
 #include "src/ray/protobuf/common.pb.h"
 
@@ -125,7 +124,6 @@ class SpilledObjectReader : public IObjectReader {
   // mutable std::unique_ptr<bi::file_mapping> file_mapping_;
   // mutable std::unique_ptr<bi::mapped_region> m_region_;
   mutable boost::iostreams::mapped_file m_file_;
-
 };
 
 }  // namespace ray

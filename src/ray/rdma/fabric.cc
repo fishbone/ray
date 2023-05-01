@@ -3,13 +3,14 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_tagged.h>
 
-#include "ray/util/logging.h"
-#include <iostream>
 #include <functional>
+#include <iostream>
+
+#include "ray/util/logging.h"
 size_t kBuffSize = 4096;
 
 #define RAY_RDMA_ACTION(OP, ...)                                   \
-  RAY_LOG(INFO) << "RDMA:" << #OP ;                                \
+  RAY_LOG(INFO) << "RDMA:" << #OP;                                 \
   do {                                                             \
     int err = OP(__VA_ARGS__);                                     \
     if (err == -FI_EAGAIN) {                                       \
@@ -81,24 +82,17 @@ const std::string &Fabric::GetAddress() const { return src_addr_; }
 
 bool Fabric::IsReady() const { return ready_; }
 
-std::tuple<uint64_t, int64_t, void*> Fabric::RegisterMemory(const char* mem, size_t s) {
+std::tuple<uint64_t, int64_t, void *> Fabric::RegisterMemory(const char *mem, size_t s) {
   fid_mr *mr = nullptr;
-  int ret = fi_mr_reg(domain_,
-                      (void *)mem,
-                      s,
-                      FI_REMOTE_READ,
-                      0,
-                      0,
-                      0,
-                      &mr,
-                      NULL);
-  RAY_CHECK(ret == 0) << "Failed fi_mr_reg: " << fi_strerror(ret) << ". " << (void*)mem << " " << s;
+  int ret = fi_mr_reg(domain_, (void *)mem, s, FI_REMOTE_READ, 0, 0, 0, &mr, NULL);
+  RAY_CHECK(ret == 0) << "Failed fi_mr_reg: " << fi_strerror(ret) << ". " << (void *)mem
+                      << " " << s;
 
-  return std::make_tuple((uint64_t)mem, fi_mr_key(mr), (void*)mr);
+  return std::make_tuple((uint64_t)mem, fi_mr_key(mr), (void *)mr);
 }
 
-void Fabric::Read(const std::string& dest,
-                  char* buff,
+void Fabric::Read(const std::string &dest,
+                  char *buff,
                   size_t len,
                   uint64_t mem_addr,
                   uint64_t mem_key,
@@ -142,10 +136,10 @@ void Fabric::Start() {
 
       RAY_CHECK(ret > 0) << fi_strerror(ret) << ", error_code=" << ret;
 
-      for(int i = 0; i < ret; ++i) {
+      for (int i = 0; i < ret; ++i) {
         auto &comp = comps[i];
-        if(comp.op_context) {
-          auto* cxt = (Context*)comp.op_context;
+        if (comp.op_context) {
+          auto *cxt = (Context *)comp.op_context;
           io_context_.post(std::move(std::move(cxt->cb)));
           delete cxt;
         }
@@ -154,11 +148,9 @@ void Fabric::Start() {
   });
 }
 
-
-
 Fabric::~Fabric() {
   ready_ = false;
-  if(pulling_) {
+  if (pulling_) {
     pulling_->join();
   }
   if (ep_) {

@@ -40,13 +40,14 @@ class Fabric {
 
   void Start();
 
-  std::tuple<uint64_t, int64_t, void*> RegisterMemory(const char* mem, size_t s);
-  void Read(const std::string& dest,
-            char* buff,
+  std::tuple<uint64_t, int64_t, void *> RegisterMemory(const char *mem, size_t s);
+  void Read(const std::string &dest,
+            char *buff,
             size_t len,
             uint64_t mem_addr,
             uint64_t mem_key,
             std::function<void()> cb);
+
  private:
   bool ready_ = false;
   std::string src_addr_;

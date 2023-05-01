@@ -430,7 +430,7 @@ NodeManager::NodeManager(instrumented_io_context &io_service,
   periodical_runner_.RunFnPeriodically([this]() { GCTaskFailureReason(); },
                                        RayConfig::instance().task_failure_entry_ttl_ms());
   RAY_LOG(INFO) << "Using Fabric: [" << RayConfig::instance().rdma_prov_name() << "]";
-  if(!RayConfig::instance().rdma_prov_name().empty()) {
+  if (!RayConfig::instance().rdma_prov_name().empty()) {
     RAY_CHECK(fabric_.Init(RayConfig::instance().rdma_prov_name().c_str()));
     fabric_.Start();
   }
