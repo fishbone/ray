@@ -49,7 +49,7 @@ bool Fabric::Init(const char *prov) {
   hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMM | FI_LOCAL_COMM;
   hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
   // hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
-  hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
+  // hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
   RAY_RDMA_INIT(fi_getinfo, version, NULL, NULL, 0, hints, &fi_);
   fi_freeinfo(hints);
   RAY_RDMA_INIT(fi_fabric, fi_->fabric_attr, &fabric_, NULL);

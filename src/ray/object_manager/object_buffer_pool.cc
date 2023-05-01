@@ -113,7 +113,7 @@ ray::Status ObjectBufferPool::CreateChunk(const ObjectID &object_id,
   return ray::Status::OK();
 }
 
-void ObjectBufferPool::WriteChunk(const ObjectID &object_id,
+bool ObjectBufferPool::WriteChunk(const ObjectID &object_id,
                                   uint64_t data_size,
                                   uint64_t metadata_size,
                                   const uint64_t chunk_index,
@@ -124,11 +124,11 @@ void ObjectBufferPool::WriteChunk(const ObjectID &object_id,
       it->second.chunk_state.at(chunk_index) != CreateChunkState::REFERENCED) {
     RAY_LOG(DEBUG) << "Object " << object_id << " aborted before chunk " << chunk_index
                    << " could be sealed";
-    return;
+    return false;
   }
   if (it->second.data_size != data_size || it->second.metadata_size != metadata_size) {
     RAY_LOG(DEBUG) << "Object " << object_id << " size mismatch, rejecting chunk";
-    return;
+    return false;
   }
   RAY_CHECK(it->second.chunk_info.size() > chunk_index);
   auto &chunk_info = it->second.chunk_info.at(chunk_index);
@@ -144,7 +144,9 @@ void ObjectBufferPool::WriteChunk(const ObjectID &object_id,
     create_buffer_state_.erase(it);
     RAY_LOG(DEBUG) << "Have received all chunks for object " << object_id
                    << ", last chunk index: " << chunk_index;
+    return true;
   }
+  return false;
 }
 
 char *ObjectBufferPool::GetChunkBuffer(const ObjectID &object_id,

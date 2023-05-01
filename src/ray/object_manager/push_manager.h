@@ -115,7 +115,10 @@ class PushManager {
     }
 
     /// Notify that a chunk is successfully sent.
-    void OnChunkComplete() { --num_chunks_inflight; }
+    bool OnChunkComplete() {
+      --num_chunks_inflight;
+      return num_chunks_inflight == 0;
+    }
 
     /// Wether all chunks are successfully sent.
     bool AllChunksComplete() {

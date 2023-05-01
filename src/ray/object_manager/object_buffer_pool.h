@@ -124,7 +124,7 @@ class ObjectBufferPool {
   /// \param object_id The ObjectID.
   /// \param chunk_index The index of the chunk.
   /// \param data The data to write into the chunk.
-  void WriteChunk(const ObjectID &object_id,
+  bool WriteChunk(const ObjectID &object_id,
                   uint64_t data_size,
                   uint64_t metadata_size,
                   uint64_t chunk_index,

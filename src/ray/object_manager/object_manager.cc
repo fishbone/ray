@@ -271,7 +271,10 @@ void ObjectManager::CancelPull(uint64_t request_id) {
   }
 }
 
+absl::flat_hash_map<ObjectID, absl::Time> start_time_;
+
 void ObjectManager::SendPullRequest(const ObjectID &object_id, const NodeID &client_id) {
+  start_time_[object_id] = absl::Time();
   auto rpc_client = GetRpcClient(client_id);
   if (rpc_client) {
     // Try pulling from the client.
@@ -429,6 +432,7 @@ void ObjectManager::PushFromFilesystem(const ObjectID &object_id,
                                        const std::string &spilled_url) {
   // SpilledObjectReader::CreateSpilledObjectReader does synchronous IO; schedule it off
   // main thread.
+  start_time_[object_id] = absl::Time();
   rpc_service_.post(
       [this, object_id, node_id, spilled_url, chunk_size = config_.object_chunk_size]() {
         auto optional_spilled_object =
@@ -498,7 +502,21 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
                     // PushManager is thread-safe.
                     main_service_->post(
                         [this, node_id, object_id]() {
-                          push_manager_->OnChunkComplete(node_id, object_id);
+                          if (push_manager_->OnChunkComplete(node_id, object_id)) {
+                            if (fabric_.IsReady()) {
+                              RAY_LOG(INFO)
+                                  << "DBG: RDMA Push finished: " << object_id << " in "
+                                  << (absl::Now() - start_time_[object_id]) /
+                                         absl::Milliseconds(1)
+                                  << "ms. " << start_time_.erase(object_id);
+                            } else {
+                              RAY_LOG(INFO)
+                                  << "DBG: gRPC Read finished: " << object_id << " in "
+                                  << (absl::Now() - start_time_[object_id]) /
+                                         absl::Milliseconds(1)
+                                  << "ms. ";
+                            }
+                          }
                         },
                         "ObjectManager.Push");
                   },
@@ -592,7 +610,7 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
   const rpc::Address &owner_address = request.owner_address();
   const std::string &data = request.data();
 
-  if (fabric_.IsReady()) {
+  if (fabric_.IsReady() && data.size() == 0) {
     if (!pull_manager_->IsObjectActive(object_id)) {
       num_chunks_received_cancelled_++;
       // This object is no longer being actively pulled. Do not create the object.
@@ -630,6 +648,9 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
                send_reply_callback,
                object_id,
                metadata_size]() mutable {
+      RAY_LOG(INFO) << "DBG: RDMA Read finished: " << object_id << " in "
+                    << (absl::Now() - start_time_[object_id]) / absl::Milliseconds(1)
+                    << "ms. " << start_time_.erase(object_id);
       send_reply_callback(Status::OK(), nullptr, nullptr);
       buffer_pool_.ChunkFinished(object_id, chunk_index);
     };
@@ -689,7 +710,11 @@ bool ObjectManager::ReceiveObjectChunk(const NodeID &node_id,
 
   if (chunk_status.ok()) {
     // Avoid handling this chunk if it's already being handled by another process.
-    buffer_pool_.WriteChunk(object_id, data_size, metadata_size, chunk_index, data);
+    if (buffer_pool_.WriteChunk(object_id, data_size, metadata_size, chunk_index, data)) {
+      RAY_LOG(INFO) << "DBG: gRPC Read finished: " << object_id << " in "
+                    << (absl::Now() - start_time_[object_id]) / absl::Milliseconds(1)
+                    << "ms. " << start_time_.erase(object_id);
+    }
     return true;
   } else {
     num_chunks_received_failed_due_to_plasma_++;
