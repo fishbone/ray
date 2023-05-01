@@ -528,7 +528,7 @@ cc_binary(
     deps = [
         "@libfabric//:libfabric",
         "@boost//:asio",
-        "@boost//:interprocess",
+        "@boost//:iostreams",
     ],
     linkopts = ["-lpthread", "-ldl", "-lrt", "-lrdmacm", "-libverbs", "-latomic", "-lefa", "-lnl-3"],
 )
@@ -2436,6 +2436,7 @@ cc_library(
         ":ray_common",
         ":ray_util",
         "@boost//:asio",
+        "@boost//:iostreams",
     ],
 )
 

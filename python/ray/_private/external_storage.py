@@ -138,8 +138,8 @@ class ExternalStorage(metaclass=abc.ABCMeta):
                 + metadata_len.to_bytes(8, byteorder="little")
                 + buf_len.to_bytes(8, byteorder="little")
                 + owner_address
-                + metadata
                 + (memoryview(buf) if buf_len else b"")
+                + metadata
             )
             # 24 bytes to store owner address, metadata, and buffer lengths.
             payload_len = len(payload)
@@ -324,8 +324,11 @@ class FileSystemStorage(ExternalStorage):
                 self._size_check(address_len, metadata_len, buf_len, parsed_result.size)
                 total += buf_len
                 owner_address = f.read(address_len)
+                pos = f.tell()
+                f.seek(buf_len, 1)
                 metadata = f.read(metadata_len)
                 # read remaining data to our buffer
+                f.seek(pos)
                 self._put_object_to_store(
                     metadata, buf_len, f, object_ref, owner_address
                 )

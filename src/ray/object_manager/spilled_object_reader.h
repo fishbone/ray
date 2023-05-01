@@ -17,12 +17,15 @@
 #include <gtest/gtest_prod.h>
 
 #include <string>
+#include "boost/iostreams/device/mapped_file.hpp"
+
 
 #include "absl/types/optional.h"
 #include "ray/object_manager/object_reader.h"
 #include "src/ray/protobuf/common.pb.h"
 
 namespace ray {
+
 /// Reader for a local object spilled in the object_url.
 /// This class is thread safe.
 class SpilledObjectReader : public IObjectReader {
@@ -102,6 +105,8 @@ class SpilledObjectReader : public IObjectReader {
   /// Deserialize 8 bytes string as a little-endian uint64_t.
   static uint64_t ToUINT64(const std::string &s);
 
+  void *GetDataAddr() const override;
+
  private:
   FRIEND_TEST(SpilledObjectReaderTest, ParseObjectURL);
   FRIEND_TEST(SpilledObjectReaderTest, ToUINT64);
@@ -117,6 +122,10 @@ class SpilledObjectReader : public IObjectReader {
   const uint64_t metadata_offset_;
   const uint64_t metadata_size_;
   const rpc::Address owner_address_;
+  // mutable std::unique_ptr<bi::file_mapping> file_mapping_;
+  // mutable std::unique_ptr<bi::mapped_region> m_region_;
+  mutable boost::iostreams::mapped_file m_file_;
+
 };
 
 }  // namespace ray

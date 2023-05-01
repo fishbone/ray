@@ -87,7 +87,6 @@ ObjectBufferPool::CreateObjectReader(const ObjectID &object_id,
         nullptr,
         ray::Status::IOError("Unable to obtain object chunk, object not local."));
   }
-
   return std::pair<std::shared_ptr<MemoryObjectReader>, ray::Status>(
       std::make_shared<MemoryObjectReader>(std::move(object_buffers[0]),
                                            std::move(owner_address)),

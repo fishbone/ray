@@ -140,8 +140,8 @@ bool SpilledObjectReader::ParseObjectHeader(std::istream &is,
     return false;
   }
 
-  metadata_offset = object_offset + UINT64_size * 3 + address_size;
-  data_offset = metadata_offset + metadata_size;
+  data_offset = object_offset + UINT64_size * 3 + address_size;
+  metadata_offset = data_offset + data_size;
   return true;
 }
 
@@ -179,4 +179,15 @@ bool SpilledObjectReader::ReadFromMetadataSection(uint64_t offset,
   std::ifstream is(file_path_, std::ios::binary);
   return is.seekg(metadata_offset_ + offset) && is.read(output, size);
 }
+
+void *SpilledObjectReader::GetDataAddr() const {
+  if(!m_file_.is_open()) {
+    boost::iostreams::mapped_file_params params;
+    m_file_.open(file_path_);
+  }
+
+  auto ptr= (void*)(m_file_.data() + data_offset_);
+  return ptr;
+}
+
 }  // namespace ray

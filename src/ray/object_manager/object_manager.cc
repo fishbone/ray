@@ -517,7 +517,6 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
                                     std::function<void(const Status &)> on_complete,
                                     std::shared_ptr<ChunkObjectReader> chunk_reader,
                                     bool from_disk) {
-  RAY_CHECK(!from_disk);
   double start_time = absl::GetCurrentTimeNanos() / 1e9;
   rpc::PushRequest push_request;
   // Set request header
@@ -558,7 +557,7 @@ void ObjectManager::SendObjectChunk(const UniqueID &push_id,
 
   // record the time cost between send chunk and receive reply
   rpc::ClientCallback<rpc::PushReply> callback =
-      [this, start_time, object_id, node_id, chunk_index, on_complete, mr](
+      [this, start_time, object_id, node_id, chunk_index, on_complete, mr, chunk_reader](
           const Status &status, const rpc::PushReply &reply) {
         // TODO: Just print warning here, should we try to resend this chunk?
         if (!status.ok()) {
@@ -621,16 +620,12 @@ void ObjectManager::HandlePush(rpc::PushRequest request,
       send_reply_callback(Status::OK(), nullptr, nullptr);
       return;
     }
-    auto cb = [this, chunk_index, buffer, data_size, send_reply_callback, object_id] () mutable {
-      RAY_LOG(INFO) << "RDMA DONE: " << object_id;
+    auto cb = [this, chunk_index, buffer, data_size, send_reply_callback, object_id, metadata_size] () mutable {
       send_reply_callback(Status::OK(), nullptr, nullptr);
       buffer_pool_.ChunkFinished(object_id, chunk_index);
     };
     fabric_.Read(request.node_id(), buffer, data_size, request.mem_addr(), request.mem_key(), std::move(cb));
   } else {
-    std::string json;
-    google::protobuf::util::MessageToJsonString(request, &json);
-    RAY_LOG(INFO) << "TCP: " << json;
     bool success = ReceiveObjectChunk(
         node_id, object_id, owner_address, data_size, metadata_size, chunk_index, data);
     num_chunks_received_total_++;

@@ -43,11 +43,12 @@ bool Fabric::Init(const char *prov) {
     RAY_LOG(ERROR) << "Init hints failed: ";
     return false;
   }
-
   hints->fabric_attr->prov_name = strdup(prov);
   hints->ep_attr->type = FI_EP_RDM;
   hints->caps = FI_MSG | FI_RMA | FI_REMOTE_COMM | FI_LOCAL_COMM;
   hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+  // hints->domain_attr->data_progress = FI_PROGRESS_AUTO;
+  hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
   RAY_RDMA_INIT(fi_getinfo, version, NULL, NULL, 0, hints, &fi_);
   fi_freeinfo(hints);
   RAY_RDMA_INIT(fi_fabric, fi_->fabric_attr, &fabric_, NULL);
@@ -82,7 +83,7 @@ bool Fabric::IsReady() const { return ready_; }
 
 std::tuple<uint64_t, int64_t, void*> Fabric::RegisterMemory(const char* mem, size_t s) {
   fid_mr *mr = nullptr;
-  RAY_CHECK(fi_mr_reg(domain_,
+  int ret = fi_mr_reg(domain_,
                       (void *)mem,
                       s,
                       FI_REMOTE_READ,
@@ -90,7 +91,9 @@ std::tuple<uint64_t, int64_t, void*> Fabric::RegisterMemory(const char* mem, siz
                       0,
                       0,
                       &mr,
-                      NULL) == 0);
+                      NULL);
+  RAY_CHECK(ret == 0) << "Failed fi_mr_reg: " << fi_strerror(ret) << ". " << (void*)mem << " " << s;
+
   return std::make_tuple((uint64_t)mem, fi_mr_key(mr), (void*)mr);
 }
 
@@ -136,11 +139,11 @@ void Fabric::Start() {
       if (ret == 0 || ret == -FI_EAGAIN) {
         continue;
       }
+
       RAY_CHECK(ret > 0) << fi_strerror(ret) << ", error_code=" << ret;
 
       for(int i = 0; i < ret; ++i) {
         auto &comp = comps[i];
-        RAY_LOG(DEBUG) << "RDMA FLAGS: " << comp.len << "\t" << fi_tostr(&comp.flags, FI_TYPE_CQ_EVENT_FLAGS);
         if(comp.op_context) {
           auto* cxt = (Context*)comp.op_context;
           io_context_.post(std::move(std::move(cxt->cb)));
