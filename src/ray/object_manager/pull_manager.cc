@@ -572,11 +572,11 @@ void PullManager::UpdateRetryTimer(ObjectPullRequest &request,
 }
 
 void PullManager::Tick() {
-  absl::MutexLock lock(&active_objects_mu_);
-  for (auto &pair : active_object_pull_requests_) {
-    const auto &object_id = pair.first;
-    TryToMakeObjectLocal(object_id);
-  }
+  // absl::MutexLock lock(&active_objects_mu_);
+  // for (auto &pair : active_object_pull_requests_) {
+  //   const auto &object_id = pair.first;
+  //   TryToMakeObjectLocal(object_id);
+  // }
 }
 
 void PullManager::PinNewObjectIfNeeded(const ObjectID &object_id) {

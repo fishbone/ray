@@ -1,0 +1,55 @@
+cluster_name: yic-object-store-benchmarks
+min_workers: 49
+max_workers: 49
+
+upscaling_speed: 9999999
+
+provider:
+    type: aws
+    region: us-west-2
+    availability_zone: us-west-2a,us-west-2b,us-west-2c,us-west-2d
+    cache_stopped_nodes: False
+
+file_mounts:
+  /home/ubuntu/workding_dir: /home/ubuntu/aws-launcher/object-store-test
+
+auth:
+    ssh_user: ubuntu
+    ssh_private_key: /home/ubuntu/.ssh/yic-dev-x.pem
+
+available_node_types:
+    default_node:
+        node_config:
+            InstanceType: c5n.9xlarge
+            KeyName: yic-dev-x
+            ImageId: ami-0511b5380d969e0cf
+            Monitoring:
+              Enabled: True
+            NetworkInterfaces:
+              - InterfaceType: efa
+                DeleteOnTermination: True
+                AssociatePublicIpAddress: True
+                SubnetId: subnet-5e0e9e75
+                Groups:
+                  - sg-040b6539a59709ab9
+                DeviceIndex: 0
+        resources:
+          node: 1
+        max_workers: 999999
+
+head_node_type: default_node
+
+setup_commands:
+  - sudo pip uninstall ray -y
+  - pip uninstall ray -y
+  - pip install ray
+  - pip install tqdm numpy
+
+head_start_ray_commands:
+    - ray stop
+    - ray start --head  --autoscaling-config=~/ray_bootstrap_config.yaml
+worker_start_ray_commands:
+    - ray stop
+    - ray start --address=$RAY_HEAD_IP:6379
+
+idle_timeout_minutes: 5

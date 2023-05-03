@@ -198,15 +198,6 @@ class ObjectManager : public ObjectManagerInterface,
   /// local object manager. False otherwise.
   bool IsPlasmaObjectSpillable(const ObjectID &object_id);
 
-  /// Consider pushing an object to a remote object manager. This object manager
-  /// may choose to ignore the Push call (e.g., if Push is called twice in a row
-  /// on the same object, the second one might be ignored).
-  ///
-  /// \param object_id The object's object id.
-  /// \param node_id The remote node's id.
-  /// \return Void.
-  void Push(const ObjectID &object_id, const NodeID &node_id);
-
   /// Pull a bundle of objects. This will attempt to make all objects in the
   /// bundle local until the request is canceled with the returned ID.
   ///
@@ -258,6 +249,17 @@ class ObjectManager : public ObjectManagerInterface,
   bool PullManagerHasPullsQueued() const { return pull_manager_->HasPullsQueued(); }
 
  private:
+
+
+  /// Consider pushing an object to a remote object manager. This object manager
+  /// may choose to ignore the Push call (e.g., if Push is called twice in a row
+  /// on the same object, the second one might be ignored).
+  ///
+  /// \param object_id The object's object id.
+  /// \param node_id The remote node's id.
+  /// \return Void.
+  void Push(const ObjectID &object_id, const NodeID &node_id);
+
   friend class TestObjectManager;
 
   /// Spread the Free request to all objects managers.
@@ -493,6 +495,8 @@ class ObjectManager : public ObjectManagerInterface,
   size_t num_chunks_received_failed_due_to_plasma_ = 0;
 
   rdma::Fabric &fabric_;
+
+  absl::flat_hash_set<std::pair<NodeID, ObjectID>> rma_pushing_;
 };
 
 }  // namespace ray

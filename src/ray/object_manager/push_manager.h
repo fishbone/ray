@@ -54,7 +54,7 @@ class PushManager {
 
   /// Called every time a chunk completes to trigger additional sends.
   /// TODO(ekl) maybe we should cancel the entire push on error.
-  void OnChunkComplete(const NodeID &dest_id, const ObjectID &obj_id);
+  bool OnChunkComplete(const NodeID &dest_id, const ObjectID &obj_id);
 
   /// Return the number of chunks currently in flight. For testing only.
   int64_t NumChunksInFlight() const { return chunks_in_flight_; };
@@ -115,9 +115,8 @@ class PushManager {
     }
 
     /// Notify that a chunk is successfully sent.
-    bool OnChunkComplete() {
+    void OnChunkComplete() {
       --num_chunks_inflight;
-      return num_chunks_inflight == 0;
     }
 
     /// Wether all chunks are successfully sent.

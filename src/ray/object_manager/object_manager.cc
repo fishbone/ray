@@ -432,7 +432,6 @@ void ObjectManager::PushFromFilesystem(const ObjectID &object_id,
                                        const std::string &spilled_url) {
   // SpilledObjectReader::CreateSpilledObjectReader does synchronous IO; schedule it off
   // main thread.
-  start_time_[object_id] = absl::Time();
   rpc_service_.post(
       [this, object_id, node_id, spilled_url, chunk_size = config_.object_chunk_size]() {
         auto optional_spilled_object =
@@ -475,18 +474,33 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
         << "Failed to establish connection for Push with remote object manager.";
     return;
   }
+
+  auto push_id = UniqueID::FromRandom();
+
   if (fabric_.IsReady()) {
+    auto p = std::make_pair(node_id, object_id);
+    if(rma_pushing_.count(p)) {
+      return;
+    }
+    rma_pushing_.insert(p);
     RAY_CHECK(chunk_reader->GetNumChunks() == 1);
+    SendObjectChunk(push_id, object_id, node_id, 0, rpc_client, [this, p, now = absl::Now()] (auto) {
+      RAY_LOG(INFO)
+          << "DBG: RDMA Push finished: " << p.second << " in "
+          << (absl::Now() - now) /
+          absl::Milliseconds(1)
+          << "ms. -> " << p.first;
+      rma_pushing_.erase(p);
+    }, chunk_reader, from_disk);
+    return;
   }
 
   RAY_LOG(INFO) << "Sending object chunks of " << object_id << " to node " << node_id
                 << ", number of chunks: " << chunk_reader->GetNumChunks()
                 << ", total data size: " << chunk_reader->GetObject().GetObjectSize();
 
-  auto push_id = UniqueID::FromRandom();
-
   push_manager_->StartPush(
-      node_id, object_id, chunk_reader->GetNumChunks(), [=](int64_t chunk_id) {
+      node_id, object_id, chunk_reader->GetNumChunks(), [=, now = absl::Now()](int64_t chunk_id) {
         rpc_service_.post(
             [=]() {
               // Post to the multithreaded RPC event loop so that data is copied
@@ -501,18 +515,18 @@ void ObjectManager::PushObjectInternal(const ObjectID &object_id,
                     // Post back to the main event loop because the
                     // PushManager is thread-safe.
                     main_service_->post(
-                        [this, node_id, object_id]() {
+                        [this, now, node_id, object_id]() {
                           if (push_manager_->OnChunkComplete(node_id, object_id)) {
                             if (fabric_.IsReady()) {
                               RAY_LOG(INFO)
                                   << "DBG: RDMA Push finished: " << object_id << " in "
-                                  << (absl::Now() - start_time_[object_id]) /
+                                  << (absl::Now() - now) /
                                          absl::Milliseconds(1)
-                                  << "ms. " << start_time_.erase(object_id);
+                                  << "ms. ";
                             } else {
                               RAY_LOG(INFO)
                                   << "DBG: gRPC Read finished: " << object_id << " in "
-                                  << (absl::Now() - start_time_[object_id]) /
+                                  << (absl::Now() - now) /
                                          absl::Milliseconds(1)
                                   << "ms. ";
                             }

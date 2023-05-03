@@ -37,17 +37,20 @@ void PushManager::StartPush(const NodeID &dest_id,
   ScheduleRemainingPushes();
 }
 
-void PushManager::OnChunkComplete(const NodeID &dest_id, const ObjectID &obj_id) {
+bool PushManager::OnChunkComplete(const NodeID &dest_id, const ObjectID &obj_id) {
   auto push_id = std::make_pair(dest_id, obj_id);
   chunks_in_flight_ -= 1;
   chunks_remaining_ -= 1;
   push_info_[push_id]->OnChunkComplete();
+  bool finished = false;
   if (push_info_[push_id]->AllChunksComplete()) {
+    finished = true;
     push_info_.erase(push_id);
     RAY_LOG(DEBUG) << "Push for " << push_id.first << ", " << push_id.second
                    << " completed, remaining: " << NumPushesInFlight();
   }
   ScheduleRemainingPushes();
+  return finished;
 }
 
 void PushManager::ScheduleRemainingPushes() {
