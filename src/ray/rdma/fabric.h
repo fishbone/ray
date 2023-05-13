@@ -56,10 +56,10 @@ class Fabric {
   fid_domain *domain_ = nullptr;
   fid_av *av_ = nullptr;
   fid_ep *ep_ = nullptr;
+  fid_poll *poll_ = nullptr;
   std::string ep_addr_;
   fid_cq *cq_ = nullptr;
   std::unordered_map<std::string, fi_addr_t> peers_;
-
   std::unique_ptr<std::thread> pulling_;
   boost::asio::io_context &io_context_;
 };

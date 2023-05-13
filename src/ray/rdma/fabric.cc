@@ -73,6 +73,13 @@ bool Fabric::Init(const char *prov) {
   RAY_RDMA_INIT(fi_getname, &ep_->fid, (char *)src_addr_.data(), &len);
   RAY_CHECK(len <= src_addr_.size());
   src_addr_.resize(len);
+
+  struct fi_poll_attr poll_attr;
+  memset(&poll_attr, 0, sizeof poll_attr);
+  RAY_RDMA_INIT(fi_poll_open, domain_, &poll_attr, &poll_);
+
+  RAY_RDMA_INIT(fi_poll_add, poll_, &cq_->fid, 0);
+
   ready_ = true;
   RAY_LOG(INFO) << "RMA Init successfully:\n" << fi_tostr(fi_, FI_TYPE_INFO);
   return true;
@@ -128,7 +135,18 @@ void Fabric::Start() {
   pulling_ = std::make_unique<std::thread>([this] {
     const size_t MAX_POLL_CNT = 10;
     fi_cq_msg_entry comps[MAX_POLL_CNT];
+
+    void *cq_context;
+
     do {
+      int ret_count = 0;
+      do {
+        ret_count = fi_poll(poll_, &cq_context, 1);
+        RAY_CHECK(ret_count >= 0)
+            << "fi_poll failed: " << fi_strerror(ret_count);
+      } while (ready_ && !ret_count);
+
+
       auto ret = fi_cq_read(cq_, comps, MAX_POLL_CNT);
       if (ret == 0 || ret == -FI_EAGAIN) {
         continue;
@@ -152,6 +170,9 @@ Fabric::~Fabric() {
   ready_ = false;
   if (pulling_) {
     pulling_->join();
+  }
+  if (poll_) {
+    fi_close(&poll_->fid);
   }
   if (ep_) {
     fi_close(&ep_->fid);

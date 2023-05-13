@@ -11,7 +11,7 @@ provider:
     cache_stopped_nodes: False
 
 file_mounts:
-  /home/ubuntu/workding_dir: /home/ubuntu/aws-launcher/object-store-test
+  /home/ubuntu/workding_dir: ./
 
 auth:
     ssh_user: ubuntu
@@ -26,8 +26,7 @@ available_node_types:
             Monitoring:
               Enabled: True
             NetworkInterfaces:
-              - InterfaceType: efa
-                DeleteOnTermination: True
+              - DeleteOnTermination: True
                 AssociatePublicIpAddress: True
                 SubnetId: subnet-5e0e9e75
                 Groups:
@@ -41,8 +40,7 @@ head_node_type: default_node
 
 setup_commands:
   - sudo pip uninstall ray -y
-  - pip uninstall ray -y
-  - pip install ray
+  - pip uninstall ray -y && pip install ray
   - pip install tqdm numpy
 
 head_start_ray_commands:

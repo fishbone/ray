@@ -11,7 +11,7 @@ provider:
     cache_stopped_nodes: False
 
 file_mounts:
-  /home/ubuntu/workding_dir: /home/ubuntu/aws-launcher/data-ingest-benchmark
+  /home/ubuntu/workding_dir: ./
 
 auth:
     ssh_user: ubuntu
@@ -23,9 +23,10 @@ available_node_types:
             InstanceType: c5n.9xlarge
             KeyName: yic-dev-x
             ImageId: ami-0511b5380d969e0cf
+            Monitoring:
+              Enabled: True
             NetworkInterfaces:
-              - InterfaceType: efa
-                DeleteOnTermination: True
+              - DeleteOnTermination: True
                 AssociatePublicIpAddress: True
                 SubnetId: subnet-5e0e9e75
                 Groups:
@@ -40,7 +41,8 @@ head_node_type: default_node
 
 setup_commands:
   - sudo pip uninstall ray -y
-  - pip install ray[data]@https://ray-wheels.s3.us-west-2.amazonaws.com/master/df53c234dc12631c495173350a18bf6e3004b112/ray-3.0.0.dev0-cp310-cp310-manylinux2014_x86_64.whl
+  - pip uninstall ray -y
+  - pip install ray
   - pip install tqdm numpy
 
 head_start_ray_commands:

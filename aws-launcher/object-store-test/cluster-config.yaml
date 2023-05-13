@@ -11,7 +11,7 @@ provider:
     cache_stopped_nodes: False
 
 file_mounts:
-  /home/ubuntu/workding_dir: /home/ubuntu/aws-launcher/object-store-test
+  /home/ubuntu/workding_dir: ./
 
 auth:
     ssh_user: ubuntu
@@ -48,10 +48,10 @@ setup_commands:
 
 head_start_ray_commands:
     - ray stop
-    - FI_OPT_EFA_USE_DEVICE_RDMA=1 RAY_rdma_prov_name="efa" ray start --head  --autoscaling-config=~/ray_bootstrap_config.yaml
+    - ray start --head  --autoscaling-config=~/ray_bootstrap_config.yaml
 
 worker_start_ray_commands:
     - ray stop
-    - FI_OPT_EFA_USE_DEVICE_RDMA=1 RAY_rdma_prov_name="efa" ray start --address=$RAY_HEAD_IP:6379
+    - ray start --address=$RAY_HEAD_IP:6379
 
 idle_timeout_minutes: 5
