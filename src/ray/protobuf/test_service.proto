@@ -30,3 +30,7 @@ service TestService {
   rpc Ping(PingRequest) returns (PingReply);
   rpc PingTimeout(PingTimeoutRequest) returns (PingTimeoutReply);
 }
+
+service TestStreamingService {
+  rpc Ping(stream PingRequest) returns (stream PingReply);
+}

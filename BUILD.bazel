@@ -29,6 +29,36 @@ config_setting(
 )
 
 # === Begin of rpc definitions ===
+cc_library(
+    name = "ray_grpc",
+    hdrs = [
+        "src/ray/common/rpc/context.h",
+        "src/ray/common/rpc/function2.hpp",
+    ],
+    copts = COPTS,
+    strip_include_prefix = "src",
+    deps = [
+        "@boost//:asio",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_github_grpc_grpc//:grpc++_reflection",
+        "@com_github_grpc_grpc//:grpcpp_admin",
+        "@com_google_protobuf//:protobuf",
+    ]
+)
+
+cc_binary(
+    name = "ray_grpc_e2e",
+    srcs = [
+        "src/ray/common/rpc/e2e.cc",
+    ],
+    copts = COPTS,
+    deps = [
+        ":ray_grpc",
+        ":ray_util",
+
+   ]
+)
+
 
 # GRPC common lib.
 cc_library(
