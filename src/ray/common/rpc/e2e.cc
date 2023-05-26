@@ -1,9 +1,11 @@
+#include <grpcpp/grpcpp.h>
+
 #include <boost/asio.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
-#include <grpcpp/grpcpp.h>
-#include "src/ray/protobuf/test_service.grpc.pb.h"
+
 #include "context.h"
+#include "src/ray/protobuf/test_service.grpc.pb.h"
 using namespace ray;
 using namespace ray::rpc;
 
@@ -13,23 +15,22 @@ class TestStreamingServiceImpl final : public TestStreamingService::CallbackServ
  public:
   grpc::ServerBidiReactor<PingRequest, PingReply> *Ping(
       grpc::CallbackServerContext *context) override {
-    auto reactor = std::make_shared<ServerRpcReactor<PingRequest, PingReply, grpc::ServerBidiReactor>>(context);
+    auto reactor = std::make_shared<
+        ServerRpcReactor<PingRequest, PingReply, grpc::ServerBidiReactor>>(context);
     auto run = [reactor]() -> boost::asio::awaitable<void> {
       PingRequest request;
       while (co_await reactor->Read(request, boost::asio::use_awaitable)) {
         PingReply reply;
-        if(!co_await reactor->Write(reply, boost::asio::use_awaitable)) {
+        if (!co_await reactor->Write(reply, boost::asio::use_awaitable)) {
           break;
         }
       }
     };
 
-    boost::asio::co_spawn(
-        io_context.get_executor(),
-        run(),
-        boost::asio::detached);
+    boost::asio::co_spawn(io_context.get_executor(), run(), boost::asio::detached);
     return reactor.get();
   }
+
  private:
 };
 
