@@ -31,8 +31,7 @@ class RpcReactorBase : public Reactor<Request, Response> {
   template <typename CompletionToken, typename R>
   auto Read(R &request, CompletionToken &&token) {
     RAY_CHECK(!read_callback_);
-    template <typename C>
-    auto init = [this](C &&handler, auto *request) mutable {
+    auto init = [this](auto &&handler, auto *request) mutable {
       read_callback_ = [handler =
                             std::forward<decltype(handler)>(handler)](bool ok) mutable {
         auto alloc = boost::asio::get_associated_allocator(
@@ -42,8 +41,8 @@ class RpcReactorBase : public Reactor<Request, Response> {
         boost::asio::dispatch(
             ex,
             boost::asio::bind_allocator(
-                alloc, [handler = std::forward<C>(handler), ok]() mutable {
-                  std::forward<C>(handler)(ok);
+                alloc, [handler = std::forward<decltype(handler)>(handler), ok]() mutable {
+                  handler(ok);
                 }));
       };
       Base::StartRead(request);
