@@ -21,13 +21,13 @@ class TestStreamingServiceImpl final : public TestStreamingService::CallbackServ
     auto run = [](auto reactor) -> boost::asio::awaitable<void> {
       PingRequest request;
       while (co_await reactor->Read(request, boost::asio::use_awaitable)) {
-        RAY_LOG(INFO) <<"ServerRead: " << request.cnt();
+        RAY_LOG(INFO) << "ServerRead: " << request.cnt();
         PingReply reply;
         reply.set_cnt(request.cnt());
         if (!co_await reactor->Write(reply, boost::asio::use_awaitable)) {
           break;
         }
-        RAY_LOG(INFO) <<"ServerWrite: " << reply.cnt();
+        RAY_LOG(INFO) << "ServerWrite: " << reply.cnt();
       }
       RAY_LOG(INFO) << "Server: EOF";
     };
@@ -51,9 +51,11 @@ std::unique_ptr<std::thread> StartServer() {
 std::unique_ptr<std::thread> StartClient() {
   auto t = std::make_unique<std::thread>([]() {
     RAY_LOG(INFO) << "Create channel";
-    auto channel = grpc::CreateChannel("127.0.0.1:8090", grpc::InsecureChannelCredentials());
+    auto channel =
+        grpc::CreateChannel("127.0.0.1:8090", grpc::InsecureChannelCredentials());
     auto stub = TestStreamingService::NewStub(channel);
-    auto reactor = std::make_shared<ClientRpcReactor<PingRequest, PingReply, grpc::ClientBidiReactor>>();
+    auto reactor = std::make_shared<
+        ClientRpcReactor<PingRequest, PingReply, grpc::ClientBidiReactor>>();
 
     stub->async()->Ping(&reactor->GetContext(), reactor.get());
     reactor->Start();

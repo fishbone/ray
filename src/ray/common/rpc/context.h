@@ -12,12 +12,10 @@ template<typename CompletionToken, typename ... Args>
 auto MakeCallback(CompletionToken&& token, Args &&args...) {
   return [&&token = std::forward<CompletionToken>(token),
           args = std::make_tuple(std::forward<Args>(args) ...)]() mutable {
-    auto alloc = boost::asio::get_associated_allocator(token, boost::asio::recycling_allocator<void>());
-    auto ex = boost::asio::get_associated_executor(token);
-    RAY_CHECK(ex) << "Invalid executor";
-    auto completion = [
-    boost::asio::dispatch(
-        ex,
+    auto alloc = boost::asio::get_associated_allocator(token,
+boost::asio::recycling_allocator<void>()); auto ex =
+boost::asio::get_associated_executor(token); RAY_CHECK(ex) << "Invalid executor"; auto
+completion = [ boost::asio::dispatch( ex,
 
   }
 }
@@ -33,7 +31,7 @@ class RpcReactorBase : public Reactor<Request, Response> {
   template <typename CompletionToken, typename R>
   auto Read(R &request, CompletionToken &&token) {
     RAY_CHECK(!read_callback_);
-    template<typename C>
+    template <typename C>
     auto init = [this](C &&handler, auto *request) mutable {
       read_callback_ = [handler =
                             std::forward<decltype(handler)>(handler)](bool ok) mutable {
@@ -44,8 +42,7 @@ class RpcReactorBase : public Reactor<Request, Response> {
         boost::asio::dispatch(
             ex,
             boost::asio::bind_allocator(
-                alloc,
-                [handler = std::forward<C>(handler), ok]() mutable {
+                alloc, [handler = std::forward<C>(handler), ok]() mutable {
                   std::forward<C>(handler)(ok);
                 }));
       };
@@ -132,7 +129,10 @@ class ServerRpcReactor : public RpcReactorBase<Request, Response, Reactor> {
   grpc::Status status_;
 };
 
-template<typename Request, typename Response, template<typename, typename> typename Reactor>
+template <typename Request,
+          typename Response,
+          template <typename, typename>
+          typename Reactor>
 class ClientRpcReactor : public RpcReactorBase<Request, Response, Reactor> {
  public:
   using Base = RpcReactorBase<Request, Response, Reactor>;
@@ -140,9 +140,7 @@ class ClientRpcReactor : public RpcReactorBase<Request, Response, Reactor> {
 
   ClientRpcReactor() {}
 
-  grpc::ClientContext& GetContext() {
-    return client_context_;
-  }
+  grpc::ClientContext &GetContext() { return client_context_; }
 
   void Start() {
     RAY_LOG(DEBUG) << "StartCall";
@@ -150,9 +148,7 @@ class ClientRpcReactor : public RpcReactorBase<Request, Response, Reactor> {
     Base::AddHold();
   }
 
-  static void operator delete(void* ptr) {
-    RAY_LOG(DEBUG) << "ClientRPC delete";
-  }
+  static void operator delete(void *ptr) { RAY_LOG(DEBUG) << "ClientRPC delete"; }
 
   // template<typename CompletionToken>
   // auto Finish(CompletionToken &&token) {
