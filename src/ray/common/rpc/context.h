@@ -7,19 +7,35 @@
 
 namespace ray {
 namespace rpc {
-/*
-template<typename CompletionToken, typename ... Args>
-auto MakeCallback(CompletionToken&& token, Args &&args...) {
-  return [&&token = std::forward<CompletionToken>(token),
-          args = std::make_tuple(std::forward<Args>(args) ...)]() mutable {
-    auto alloc = boost::asio::get_associated_allocator(token,
-boost::asio::recycling_allocator<void>()); auto ex =
-boost::asio::get_associated_executor(token); RAY_CHECK(ex) << "Invalid executor"; auto
-completion = [ boost::asio::dispatch( ex,
 
-  }
+template<typename CompletionToken, typename Arg>
+fu2::unique_function<void(Arg)> MakeCallback(CompletionToken&& handler) {
+  using HandlerType = std::decay_t<decltype(handler)>;
+  return [handler = std::forward<HandlerType>(handler)](Arg arg) mutable {
+    auto alloc = boost::asio::get_associated_allocator(
+        handler, boost::asio::recycling_allocator<void>());
+    auto ex = boost::asio::get_associated_executor(handler);
+    RAY_CHECK(ex) << "Invalid executor";
+    boost::asio::dispatch(ex, boost::asio::bind_allocator(alloc, std::bind(std::move(handler), arg)));
+  };
 }
-*/
+
+
+template<typename CompletionToken, typename OpFn, typename CallbackFn, typename ... Args>
+auto RayRpcAsyncInit(OpFn op_fn, CallbackFn& cb_fn) {
+  return [this](auto &&handler, auto
+}
+
+
+template <typename Request, typename Response>
+class RayServerBidiReactor : public ServerBidiReactor<Request, Response> {
+  using Base = ServerBidiReactor<Request, Response>;
+
+ private:
+  fu2::unique_function<void(bool ok)> read_callback_;
+  fu2::unique_function<void(bool ok)> write_callback_;
+};
+
 template <typename Request,
           typename Response,
           template <typename, typename>
@@ -32,19 +48,8 @@ class RpcReactorBase : public Reactor<Request, Response> {
   auto Read(R &request, CompletionToken &&token) {
     RAY_CHECK(!read_callback_);
     auto init = [this](auto &&handler, auto *request) mutable {
-      read_callback_ = [handler =
-                            std::forward<decltype(handler)>(handler)](bool ok) mutable {
-        auto alloc = boost::asio::get_associated_allocator(
-            handler, boost::asio::recycling_allocator<void>());
-        auto ex = boost::asio::get_associated_executor(handler);
-        RAY_CHECK(ex) << "Invalid executor";
-        boost::asio::dispatch(
-            ex,
-            boost::asio::bind_allocator(
-                alloc, [handler = std::forward<decltype(handler)>(handler), ok]() mutable {
-                  handler(ok);
-                }));
-      };
+      using HandlerType = std::decay_t<decltype(handler)>;
+      read_callback_ = MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
       Base::StartRead(request);
     };
 
@@ -68,13 +73,7 @@ class RpcReactorBase : public Reactor<Request, Response> {
             handler, boost::asio::recycling_allocator<void>());
         auto ex = boost::asio::get_associated_executor(handler);
         RAY_CHECK(ex) << "Invalid executor";
-        boost::asio::dispatch(
-            ex,
-            boost::asio::bind_allocator(
-                alloc,
-                [handler = std::forward<decltype(handler)>(handler), ok]() mutable {
-                  std::forward<decltype(handler)>(handler)(ok);
-                }));
+        boost::asio::dispatch(ex, boost::asio::bind_allocator(alloc, std::bind(std::move(handler), ok)));
       };
       Base::StartWrite(&response, opts);
     };
@@ -149,16 +148,17 @@ class ClientRpcReactor : public RpcReactorBase<Request, Response, Reactor> {
 
   static void operator delete(void *ptr) { RAY_LOG(DEBUG) << "ClientRPC delete"; }
 
-  // template<typename CompletionToken>
-  // auto Finish(CompletionToken &&token) {
+  template<typename CompletionToken>
+  auto WriteDone(CompletionToken &&token) {
 
-  // }
+  }
  private:
   void OnDone(const grpc::Status &status) override {
     RAY_LOG(DEBUG) << "ClientRPC OnDone";
     ::operator delete(this);
   }
 
+  fu2::unique_function<void(grpc::Status)> finished_callback_;
   grpc::ClientContext client_context_;
 };
 

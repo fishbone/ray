@@ -21,15 +21,15 @@ class TestStreamingServiceImpl final : public TestStreamingService::CallbackServ
     auto run = [](auto reactor) -> boost::asio::awaitable<void> {
       PingRequest request;
       while (co_await reactor->Read(request, boost::asio::use_awaitable)) {
-        RAY_LOG(INFO) << "ServerRead: " << request.cnt();
+        RAY_LOG(INFO) << "ServerRead: " << request.cnt()  << " " << std::this_thread::get_id();
         PingReply reply;
         reply.set_cnt(request.cnt());
         if (!co_await reactor->Write(reply, boost::asio::use_awaitable)) {
           break;
         }
-        RAY_LOG(INFO) << "ServerWrite: " << reply.cnt();
+        RAY_LOG(INFO) << "ServerWrite: " << reply.cnt()  << " " << std::this_thread::get_id();
       }
-      RAY_LOG(INFO) << "Server: EOF";
+      RAY_LOG(INFO) << "Server: EOF" << " " << std::this_thread::get_id();
     };
     boost::asio::co_spawn(io_context.get_executor(), run(reactor), boost::asio::detached);
     return reactor.get();
@@ -65,12 +65,12 @@ std::unique_ptr<std::thread> StartClient() {
       request.set_cnt(i++);
       PingReply reply;
       while (co_await reactor->Write(request, boost::asio::use_awaitable)) {
-        RAY_LOG(INFO) << "ClientWrite: " << request.cnt();
+        RAY_LOG(INFO) << "ClientWrite: " << request.cnt() << " " << std::this_thread::get_id();
         if (!co_await reactor->Read(reply, boost::asio::use_awaitable)) {
-          RAY_LOG(INFO) << "ClientRead: EOF";
+          RAY_LOG(INFO) << "ClientRead: EOF"  << " " << std::this_thread::get_id();
           break;
         }
-        RAY_LOG(INFO) << "ClientRead: " << reply.cnt();
+        RAY_LOG(INFO) << "ClientRead: " << reply.cnt()  << " " << std::this_thread::get_id();
         request.set_cnt(i++);
       }
       RAY_LOG(INFO) << "Client: EOF";
