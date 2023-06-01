@@ -15,21 +15,30 @@ class TestStreamingServiceImpl final : public TestStreamingService::CallbackServ
  public:
   grpc::ServerBidiReactor<PingRequest, PingReply> *Ping(
       grpc::CallbackServerContext *context) override {
+    using Reactor =
+        RayServerBidiReactor<RayReactor<PingRequest,
+                                        PingReply,
+                                        grpc::ServerBidiReactor<PingRequest, PingReply>>>;
     RAY_LOG(INFO) << "Server: Ping request";
-    auto reactor = std::make_shared<
-        ServerRpcReactor<PingRequest, PingReply, grpc::ServerBidiReactor>>(context);
+    auto reactor = std::make_shared<Reactor>(context);
+
     auto run = [](auto reactor) -> boost::asio::awaitable<void> {
-      PingRequest request;
-      while (co_await reactor->Read(request, boost::asio::use_awaitable)) {
-        RAY_LOG(INFO) << "ServerRead: " << request.cnt()  << " " << std::this_thread::get_id();
+      auto [request, status] = co_await reactor->Read(boost::asio::use_awaitable);
+      while (status.ok()) {
+        RAY_LOG(INFO) << "ServerRead: " << request.cnt() << " "
+                      << std::this_thread::get_id();
         PingReply reply;
         reply.set_cnt(request.cnt());
-        if (!co_await reactor->Write(reply, boost::asio::use_awaitable)) {
+        if (auto status = co_await reactor->Write(reply, boost::asio::use_awaitable);
+            !status.ok()) {
           break;
         }
-        RAY_LOG(INFO) << "ServerWrite: " << reply.cnt()  << " " << std::this_thread::get_id();
+        RAY_LOG(INFO) << "ServerWrite: " << reply.cnt() << " "
+                      << std::this_thread::get_id();
+        std::tie(request, status) = co_await reactor->Read(boost::asio::use_awaitable);
       }
-      RAY_LOG(INFO) << "Server: EOF" << " " << std::this_thread::get_id();
+      RAY_LOG(INFO) << "Server: EOF"
+                    << " " << std::this_thread::get_id();
     };
     boost::asio::co_spawn(io_context.get_executor(), run(reactor), boost::asio::detached);
     return reactor.get();
@@ -54,24 +63,34 @@ std::unique_ptr<std::thread> StartClient() {
     auto channel =
         grpc::CreateChannel("127.0.0.1:8090", grpc::InsecureChannelCredentials());
     auto stub = TestStreamingService::NewStub(channel);
-    auto reactor = std::make_shared<
-        ClientRpcReactor<PingRequest, PingReply, grpc::ClientBidiReactor>>();
+
+    auto reactor = std::make_shared<RayClientBidiReactor<
+        RayReactor<PingRequest,
+                   PingReply,
+                   grpc::ClientBidiReactor<PingRequest, PingReply>>>>();
 
     stub->async()->Ping(&reactor->GetContext(), reactor.get());
-    reactor->Start();
+    reactor->StartCall();
     auto run = [](auto reactor) -> boost::asio::awaitable<void> {
       int64_t i = 0;
       PingRequest request;
       request.set_cnt(i++);
       PingReply reply;
-      while (co_await reactor->Write(request, boost::asio::use_awaitable)) {
-        RAY_LOG(INFO) << "ClientWrite: " << request.cnt() << " " << std::this_thread::get_id();
-        if (!co_await reactor->Read(reply, boost::asio::use_awaitable)) {
-          RAY_LOG(INFO) << "ClientRead: EOF"  << " " << std::this_thread::get_id();
+      auto status = co_await reactor->Write(request, boost::asio::use_awaitable);
+      while (status.ok()) {
+        RAY_LOG(INFO) << "ClientWrite: " << request.cnt() << " "
+                      << std::this_thread::get_id();
+        if (std::tie(reply, status) =
+                (co_await reactor->Read(boost::asio::use_awaitable));
+            !status.ok()) {
+          RAY_LOG(INFO) << "ClientRead: EOF"
+                        << " " << std::this_thread::get_id();
           break;
         }
-        RAY_LOG(INFO) << "ClientRead: " << reply.cnt()  << " " << std::this_thread::get_id();
+        RAY_LOG(INFO) << "ClientRead: " << reply.cnt() << " "
+                      << std::this_thread::get_id();
         request.set_cnt(i++);
+        status = co_await reactor->Write(request, boost::asio::use_awaitable);
       }
       RAY_LOG(INFO) << "Client: EOF";
     };
