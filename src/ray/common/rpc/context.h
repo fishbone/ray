@@ -186,7 +186,9 @@ class RayServerBidiReactor : public RayServerReadReactor<TReactor>,
 };
 
 template <typename TReactor>
-class RayClientUnaryReactor : virtual public TReactor {
+class RayClientUnaryReactor
+    : virtual public TReactor,
+      public std::enable_shared_from_this<RayClientUnaryReactor<TReactor>> {
  public:
   using Reactor = TReactor;
   using Request = typename Reactor::Request;
@@ -208,18 +210,20 @@ class RayClientUnaryReactor : virtual public TReactor {
         init, std::forward<CompletionToken>(token));
   }
 
-  ~RayClientUnaryReactor() {
-    if (read_metadata_cb_) {
-      read_metadata_cb_(status_);
-    }
+  void StartCall() {
+    // Increase the ref count to make sure the reactor is alive until the call is done.
+    // This will create a cirtular, but it'll be broken when OnDone is called in gRPC.
+    self_ = this->shared_from_this();
+    Reactor::StartCall();
   }
-
-  const grpc::Status &GetStatus() const { return status_; }
 
  private:
   void OnDone(const grpc::Status &status) override {
-    status_ = status;
-    delete this;
+    if (read_metadata_cb_) {
+      auto f = std::move(read_metadata_cb_);
+      f(status);
+    }
+    self_ = nullptr;
   }
 
   void OnReadInitialMetadataDone(bool ok) override {
@@ -229,7 +233,7 @@ class RayClientUnaryReactor : virtual public TReactor {
     }
   }
 
-  grpc::Status status_;
+  std::shared_ptr<RayClientUnaryReactor> self_;
   grpc::ClientContext client_context_;
   fu2::unique_function<void(grpc::Status)> read_metadata_cb_;
 };
@@ -260,13 +264,14 @@ class RayClientWriteReactor : virtual public RayClientUnaryReactor<TReactor> {
         init, std::forward<CompletionToken>(token), request);
   }
 
-  virtual ~RayClientWriteReactor() {
+ protected:
+  void OnDone(const grpc::Status &status) override {
     if (write_callback_) {
-      write_callback_(this->GetStatus());
+      auto f = std::move(write_callback_);
+      write_callback_(status);
     }
   }
 
- private:
   void OnWriteDone(bool ok) override {
     if (ok) {
       RAY_CHECK(write_callback_);
@@ -298,18 +303,19 @@ class RayClientReadReactor : virtual public RayClientUnaryReactor<TReactor> {
         init, std::forward<CompletionToken>(token));
   }
 
-  virtual ~RayClientReadReactor() {
+ protected:
+  void OnDone(const grpc::Status &status) override {
     if (read_callback_) {
-      read_callback_(std::make_pair(std::move(response_), this->GetStatus()));
+      auto f = std::move(read_callback_);
+      f(std::make_pair(Response(), status));
     }
   }
 
- private:
   void OnReadDone(bool ok) override {
     RAY_CHECK(read_callback_);
     if (ok) {
       auto f = std::move(read_callback_);
-      f(std::make_pair(std::move(response_), grpc::Status::OK));
+      f(std::make_pair(Response(), grpc::Status::OK));
     }
   }
 
@@ -318,8 +324,8 @@ class RayClientReadReactor : virtual public RayClientUnaryReactor<TReactor> {
 };
 
 template <typename TReactor>
-class RayClientBidiReactor : public RayClientReadReactor<TReactor>,
-                             public RayClientWriteReactor<TReactor> {
+class RayClientBidiReactor : virtual public RayClientReadReactor<TReactor>,
+                             virtual public RayClientWriteReactor<TReactor> {
   using ReadBase = RayClientReadReactor<TReactor>;
   using WriteBase = RayClientWriteReactor<TReactor>;
   static_assert(std::is_same_v<typename ReadBase::Base, typename WriteBase::Base>);
@@ -327,6 +333,12 @@ class RayClientBidiReactor : public RayClientReadReactor<TReactor>,
 
   using Response = typename ReadBase::Response;
   using Request = typename WriteBase::Request;
+
+ protected:
+  void OnDone(const grpc::Status &status) override {
+    ReadBase::OnDone(status);
+    WriteBase::OnDone(status);
+  }
 };
 
 }  // namespace rpc
