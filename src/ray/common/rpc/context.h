@@ -26,6 +26,17 @@ struct RayReactor : public TReactor {
   using Request = TRequest;
   using Response = TResponse;
   using Reactor = TReactor;
+
+  void Deref() {
+    if (--ref_count_ == 0) {
+      RAY_LOG(INFO) << "Destroying reactor";
+      delete this;
+    }
+  }
+
+ private:
+  // One ref for the shared ptr and the other ond for gRPC.
+  std::atomic<int64_t> ref_count_{2};
 };
 
 template <typename TReactor>
@@ -36,8 +47,17 @@ class RayServerUnaryReactor : virtual public TReactor {
   using Reactor = TReactor;
   using Request = typename Reactor::Request;
   using Response = typename Reactor::Response;
+  virtual ~RayServerUnaryReactor() {
+    RAY_LOG(ERROR) << "RayServerUnaryReactor destroyed";
+  }
 
-  void Finish(const grpc::Status &status) { Reactor::Finish(status); }
+  void Finish(const grpc::Status &status = grpc::Status::OK) {
+    RAY_LOG(ERROR) << "Server::Finish";
+    if (!finished_) {
+      finished_ = true;
+      Reactor::Finish(status);
+    }
+  }
 
   grpc::CallbackServerContext &GetContext() { return *server_context_; }
 
@@ -47,37 +67,38 @@ class RayServerUnaryReactor : virtual public TReactor {
     auto init = [this](auto &&handler) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
       send_metadata_cb_ =
-          MakeCallback<HandlerType, grpc::Status>(std::forward<HandlerType>(handler));
+          MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
       this->StartSendInitialMetadata();
     };
 
-    return boost::asio::async_initiate<CompletionToken, void(grpc::Status)>(
+    return boost::asio::async_initiate<CompletionToken, void(bool)>(
         init, std::forward<CompletionToken>(token));
   }
 
  private:
-  void OnDone() override { delete this; }
+  void OnDone() override {
+    RAY_LOG(ERROR) << "ServerOnDone";
+    this->Deref();
+  }
 
-  void OnCancel() override { Finish(grpc::Status::CANCELLED); }
+  void OnCancel() override {
+    RAY_LOG(ERROR) << "Server:OnCancel";
+    Finish(grpc::Status::CANCELLED);
+  }
 
   void OnSendInitialMetadataDone(bool ok) override {
     if (send_metadata_cb_) {
       auto f = std::move(send_metadata_cb_);
-      if (ok) {
-        f(grpc::Status::OK);
-      } else {
-        if (server_context_->IsCancelled()) {
-          f(grpc::Status::CANCELLED);
-        } else {
-          RAY_LOG(WARNING) << "Unexpected error sending initial metadata";
-          f(grpc::Status(grpc::StatusCode::INTERNAL, "Failed to send initial metadata"));
-        }
-      }
+      f(ok);
     }
   }
 
+  template <typename Reactor>
+  friend std::shared_ptr<Reactor> MakeServerReactor(grpc::CallbackServerContext *);
+
+  bool finished_ = false;
   grpc::CallbackServerContext *server_context_;
-  fu2::unique_function<void(grpc::Status)> send_metadata_cb_;
+  fu2::unique_function<void(bool)> send_metadata_cb_;
 };
 
 template <typename TReactor>
@@ -101,11 +122,11 @@ class RayServerWriteReactor : virtual public RayServerUnaryReactor<TReactor> {
                                                const auto &response) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
       write_callback_ =
-          MakeCallback<HandlerType, grpc::Status>(std::forward<HandlerType>(handler));
+          MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
       this->StartWrite(&response, opts);
     };
 
-    return boost::asio::async_initiate<CompletionToken, void(grpc::Status)>(
+    return boost::asio::async_initiate<CompletionToken, void(bool)>(
         init, std::forward<CompletionToken>(token), response);
   }
 
@@ -113,19 +134,10 @@ class RayServerWriteReactor : virtual public RayServerUnaryReactor<TReactor> {
   void OnWriteDone(bool ok) override {
     RAY_CHECK(write_callback_);
     auto f = std::move(write_callback_);
-    if (ok) {
-      f(grpc::Status::OK);
-    } else {
-      if (this->GetContext().IsCancelled()) {
-        f(grpc::Status::CANCELLED);
-      } else {
-        RAY_LOG(WARNING) << "Unexpected error sending response";
-        f(grpc::Status(grpc::StatusCode::INTERNAL, "Failed to send response"));
-      }
-    }
+    f(ok);
   }
 
-  fu2::unique_function<void(grpc::Status)> write_callback_;
+  fu2::unique_function<void(bool)> write_callback_;
 };
 
 template <typename TReactor>
@@ -142,13 +154,12 @@ class RayServerReadReactor : virtual public RayServerUnaryReactor<TReactor> {
     RAY_CHECK(!read_callback_);
     auto init = [this](auto &&handler) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
-      read_callback_ = MakeCallback<HandlerType, std::pair<Request, grpc::Status>>(
+      read_callback_ = MakeCallback<HandlerType, std::pair<Request, bool>>(
           std::forward<HandlerType>(handler));
       this->StartRead(&request_);
     };
 
-    return boost::asio::async_initiate<CompletionToken,
-                                       void(std::pair<Request, grpc::Status>)>(
+    return boost::asio::async_initiate<CompletionToken, void(std::pair<Request, bool>)>(
         init, std::forward<CompletionToken>(token));
   }
 
@@ -156,19 +167,11 @@ class RayServerReadReactor : virtual public RayServerUnaryReactor<TReactor> {
   void OnReadDone(bool ok) override {
     RAY_CHECK(read_callback_);
     auto f = std::move(read_callback_);
-    grpc::Status status;
-    if (!ok) {
-      if (this->GetContext().IsCancelled()) {
-        status = grpc::Status::CANCELLED;
-      } else {
-        status = grpc::Status(grpc::StatusCode::OUT_OF_RANGE, "EOF");
-      }
-    }
-    f(std::make_pair(std::move(request_), std::move(status)));
+    f(std::make_pair(std::move(request_), ok));
   }
 
   Request request_;
-  fu2::unique_function<void(std::pair<Request, grpc::Status>)> read_callback_;
+  fu2::unique_function<void(std::pair<Request, bool>)> read_callback_;
 };
 
 template <typename TReactor>
@@ -186,13 +189,15 @@ class RayServerBidiReactor : public RayServerReadReactor<TReactor>,
 };
 
 template <typename TReactor>
-class RayClientUnaryReactor
-    : virtual public TReactor,
-      public std::enable_shared_from_this<RayClientUnaryReactor<TReactor>> {
+class RayClientUnaryReactor : virtual public TReactor {
  public:
   using Reactor = TReactor;
   using Request = typename Reactor::Request;
   using Response = typename Reactor::Response;
+
+  virtual ~RayClientUnaryReactor() {
+    RAY_LOG(ERROR) << "RayClientUnaryReactor destroyed";
+  }
 
   grpc::ClientContext &GetContext() { return client_context_; }
 
@@ -202,40 +207,87 @@ class RayClientUnaryReactor
     auto init = [this](auto &&handler) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
       read_metadata_cb_ =
-          MakeCallback<HandlerType, grpc::Status>(std::forward<HandlerType>(handler));
+          MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
       this->StartReadInitialMetadata();
     };
 
-    return boost::asio::async_initiate<CompletionToken, void(grpc::Status)>(
+    return boost::asio::async_initiate<CompletionToken, void(bool)>(
         init, std::forward<CompletionToken>(token));
   }
 
+  template <typename CompletionToken>
+  auto AsyncWait(CompletionToken &&token) {
+    RAY_CHECK(!wait_callback_) << "The AsyncWait has already called";
+    auto init = [this](auto &&handler) mutable {
+      using HandlerType = std::decay_t<decltype(handler)>;
+      auto f =
+          MakeCallback<HandlerType, grpc::Status>(std::forward<HandlerType>(handler));
+      absl::MutexLock lock(&wait_callback_mutex_);
+      if (status_.has_value()) {
+        f(*status_);
+      } else {
+        wait_callback_ = std::move(f);
+      }
+    };
+
+    return boost::asio::async_initiate<CompletionToken, void(bool)>(
+        init, std::forward<CompletionToken>(token));
+  }
   void StartCall() {
     // Increase the ref count to make sure the reactor is alive until the call is done.
     // This will create a cirtular, but it'll be broken when OnDone is called in gRPC.
-    self_ = this->shared_from_this();
+    RAY_LOG(ERROR) << "hold_count_= " << hold_count_;
+    Reactor::AddMultipleHolds(hold_count_);
     Reactor::StartCall();
   }
 
- private:
-  void OnDone(const grpc::Status &status) override {
-    if (read_metadata_cb_) {
-      auto f = std::move(read_metadata_cb_);
-      f(status);
+ protected:
+  void AddHold() { ++hold_count_; }
+
+  void RemoveHold() {
+    --hold_count_;
+    Reactor::RemoveHold();
+  }
+
+  void ClearHold() {
+    while (hold_count_ > 0) {
+      RemoveHold();
     }
-    self_ = nullptr;
+  }
+
+  void OnDone(const grpc::Status &status) override {
+    {
+      absl::MutexLock lock(&wait_callback_mutex_);
+      if (wait_callback_) {
+        auto f = std::move(wait_callback_);
+        f(status);
+      } else {
+        status_ = status;
+      }
+    }
+    this->Deref();
   }
 
   void OnReadInitialMetadataDone(bool ok) override {
-    if (ok && read_metadata_cb_) {
+    if (read_metadata_cb_) {
       auto f = std::move(read_metadata_cb_);
-      f(grpc::Status::OK);
+      f(ok);
     }
   }
 
-  std::shared_ptr<RayClientUnaryReactor> self_;
+  template <typename Reactor>
+  friend std::shared_ptr<Reactor> MakeClientReactor();
+
+  bool done_ = false;
+  int hold_count_ = 0;
   grpc::ClientContext client_context_;
-  fu2::unique_function<void(grpc::Status)> read_metadata_cb_;
+  fu2::unique_function<void(bool)> read_metadata_cb_;
+
+  absl::Mutex wait_callback_mutex_;
+
+  std::optional<grpc::Status> status_ GUARDED_BY(wait_callback_mutex_);
+  fu2::unique_function<void(grpc::Status)> wait_callback_
+      GUARDED_BY(wait_callback_mutex_);
 };
 
 template <typename TReactor>
@@ -243,6 +295,8 @@ class RayClientWriteReactor : virtual public RayClientUnaryReactor<TReactor> {
  public:
   using Base = RayClientUnaryReactor<TReactor>;
   using Request = typename Base::Request;
+
+  RayClientWriteReactor() { Base::AddHold(); }
 
   template <typename CompletionToken>
   auto Write(const Request &request, CompletionToken &&token) {
@@ -256,31 +310,48 @@ class RayClientWriteReactor : virtual public RayClientUnaryReactor<TReactor> {
                                                const auto &request) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
       write_callback_ =
-          MakeCallback<HandlerType, grpc::Status>(std::forward<HandlerType>(handler));
+          MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
+      RAY_LOG(ERROR) << "ClientStartWrite";
       this->StartWrite(&request, opts);
     };
 
-    return boost::asio::async_initiate<CompletionToken, void(grpc::Status)>(
+    return boost::asio::async_initiate<CompletionToken, void(bool)>(
         init, std::forward<CompletionToken>(token), request);
   }
 
+  template <typename CompletionToken>
+  auto WritesDone(CompletionToken &&token) {
+    RAY_CHECK(!write_callback_) << "There is a pending write";
+    auto init = [this](auto &&handler) mutable {
+      using HandlerType = std::decay_t<decltype(handler)>;
+      write_done_callback_ =
+          MakeCallback<HandlerType, bool>(std::forward<HandlerType>(handler));
+      this->StartWritesDone();
+    };
+  }
+
  protected:
-  void OnDone(const grpc::Status &status) override {
-    if (write_callback_) {
-      auto f = std::move(write_callback_);
-      write_callback_(status);
+  void OnWritesDoneDone(bool ok) override {
+    RAY_LOG(ERROR) << "WriteDoneDone";
+    auto f = std::move(write_done_callback_);
+    f(ok);
+    if (!ok) {
+      Base::RemoveHold();
     }
   }
 
   void OnWriteDone(bool ok) override {
-    if (ok) {
-      RAY_CHECK(write_callback_);
-      auto f = std::move(write_callback_);
-      f(grpc::Status::OK);
+    RAY_LOG(ERROR) << "ClientWriteDone: " << ok;
+    RAY_CHECK(write_callback_);
+    auto f = std::move(write_callback_);
+    f(ok);
+    if (!ok) {
+      Base::RemoveHold();
     }
   }
 
-  fu2::unique_function<void(grpc::Status)> write_callback_;
+  fu2::unique_function<void(bool)> write_done_callback_;
+  fu2::unique_function<void(bool)> write_callback_;
 };
 
 template <typename TReactor>
@@ -288,39 +359,34 @@ class RayClientReadReactor : virtual public RayClientUnaryReactor<TReactor> {
  public:
   using Base = RayClientUnaryReactor<TReactor>;
   using Response = typename Base::Response;
+  RayClientReadReactor() { Base::AddHold(); }
 
   template <typename CompletionToken>
   auto Read(CompletionToken &&token) {
     RAY_CHECK(!read_callback_);
     auto init = [this](auto &&handler) mutable {
       using HandlerType = std::decay_t<decltype(handler)>;
-      read_callback_ = MakeCallback<HandlerType, std::pair<Response, grpc::Status>>(
+      read_callback_ = MakeCallback<HandlerType, std::pair<Response, bool>>(
           std::forward<HandlerType>(handler));
       this->StartRead(&response_);
     };
-    return boost::asio::async_initiate<CompletionToken,
-                                       void(std::pair<Response, grpc::Status>)>(
+    return boost::asio::async_initiate<CompletionToken, void(std::pair<Response, bool>)>(
         init, std::forward<CompletionToken>(token));
   }
 
  protected:
-  void OnDone(const grpc::Status &status) override {
-    if (read_callback_) {
-      auto f = std::move(read_callback_);
-      f(std::make_pair(Response(), status));
-    }
-  }
-
   void OnReadDone(bool ok) override {
+    RAY_LOG(ERROR) << "ClientReadDone: " << ok;
     RAY_CHECK(read_callback_);
-    if (ok) {
-      auto f = std::move(read_callback_);
-      f(std::make_pair(Response(), grpc::Status::OK));
+    auto f = std::move(read_callback_);
+    f(std::make_pair(std::move(response_), ok));
+    if (!ok) {
+      Base::RemoveHold();
     }
   }
 
   Response response_;
-  fu2::unique_function<void(std::pair<Response, grpc::Status>)> read_callback_;
+  fu2::unique_function<void(std::pair<Response, bool>)> read_callback_;
 };
 
 template <typename TReactor>
@@ -333,13 +399,24 @@ class RayClientBidiReactor : virtual public RayClientReadReactor<TReactor>,
 
   using Response = typename ReadBase::Response;
   using Request = typename WriteBase::Request;
-
- protected:
-  void OnDone(const grpc::Status &status) override {
-    ReadBase::OnDone(status);
-    WriteBase::OnDone(status);
-  }
 };
+
+template <typename Reactor>
+std::shared_ptr<Reactor> MakeServerReactor(grpc::CallbackServerContext *context) {
+  return std::shared_ptr<Reactor>(new Reactor(context), [](auto p) {
+    p->Finish();
+    p->Deref();
+  });
+}
+
+template <typename Reactor>
+std::shared_ptr<Reactor> MakeClientReactor() {
+  return std::shared_ptr<Reactor>(new Reactor(), [](auto p) {
+    RAY_LOG(ERROR) << "Client::Deref";
+    p->ClearHold();
+    p->Deref();
+  });
+}
 
 }  // namespace rpc
 }  // namespace ray
