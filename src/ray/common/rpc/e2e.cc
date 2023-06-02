@@ -79,12 +79,14 @@ std::unique_ptr<std::thread> StartClient() {
       PingRequest request;
       request.set_cnt(i++);
       PingReply reply;
-      auto status = co_await reactor->Write(request, boost::asio::use_awaitable);
-      while (status) {
+      auto status1 = co_await reactor->Write(request, boost::asio::use_awaitable);
+      auto status2 = co_await reactor->Write(request, boost::asio::use_awaitable);
+      while (status1 && status2) {
         RAY_LOG(ERROR) << "ClientWrite: " << request.cnt() << " "
                        << std::this_thread::get_id();
-        std::tie(reply, status) = co_await reactor->Read(boost::asio::use_awaitable);
-        if (!status) {
+        std::tie(reply, status1) = co_await reactor->Read(boost::asio::use_awaitable);
+        std::tie(reply, status2) = co_await reactor->Read(boost::asio::use_awaitable);
+        if (!status1 || !status2) {
           RAY_LOG(ERROR) << "ClientRead: EOF"
                          << " " << std::this_thread::get_id();
           break;
@@ -92,7 +94,8 @@ std::unique_ptr<std::thread> StartClient() {
         RAY_LOG(ERROR) << "ClientRead: " << reply.cnt() << " "
                        << std::this_thread::get_id();
         request.set_cnt(i++);
-        status = co_await reactor->Write(request, boost::asio::use_awaitable);
+        status1 = co_await reactor->Write(request, boost::asio::use_awaitable);
+        status2 = co_await reactor->Write(request, boost::asio::use_awaitable);
       }
       RAY_LOG(ERROR) << "Client: EOF:";
     };
