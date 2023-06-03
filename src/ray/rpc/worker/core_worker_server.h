@@ -15,6 +15,7 @@
 #pragma once
 
 #include "ray/common/asio/instrumented_io_context.h"
+#include "ray/common/rpc/context.h"
 #include "ray/rpc/grpc_server.h"
 #include "ray/rpc/server_call.h"
 #include "src/ray/protobuf/core_worker.grpc.pb.h"
@@ -29,7 +30,6 @@ namespace rpc {
 /// NOTE: See src/ray/core_worker/core_worker.h on how to add a new grpc handler.
 /// Disable gRPC server metrics since it incurs too high cardinality.
 #define RAY_CORE_WORKER_RPC_HANDLERS                                                     \
-  RPC_SERVICE_HANDLER_SERVER_METRICS_DISABLED(CoreWorkerService, PushTask, -1)           \
   RPC_SERVICE_HANDLER_SERVER_METRICS_DISABLED(                                           \
       CoreWorkerService, DirectActorCallArgWaitComplete, -1)                             \
   RPC_SERVICE_HANDLER_SERVER_METRICS_DISABLED(                                           \
@@ -110,7 +110,13 @@ class CoreWorkerGrpcService : public GrpcService {
   /// \param[in] handler The service handler that actually handle the requests.
   CoreWorkerGrpcService(instrumented_io_context &main_service,
                         CoreWorkerServiceHandler &service_handler)
-      : GrpcService(main_service), service_handler_(service_handler) {}
+      : GrpcService(main_service),
+        callback_service_(service_handler),
+        service_handler_(service_handler) {}
+
+  CallbackCoreWorkerService::CallbackService &GetCallbackService() {
+    return callback_service_;
+  }
 
  protected:
   grpc::Service &GetGrpcService() override { return service_; }
@@ -122,9 +128,27 @@ class CoreWorkerGrpcService : public GrpcService {
   }
 
  private:
+  struct CallbackCoreWorkerServiceImpl final : public CallbackCoreWorkerService::CallbackService {
+   public:
+    CallbackCoreWorkerServiceImpl(CoreWorkerServiceHandler &service_handler)
+        : service_handler_(service_handler) {}
+    ::grpc::ServerUnaryReactor* PushTask(
+         ::grpc::CallbackServerContext* context,
+         const ray::rpc::PushTaskRequest* request,
+         ray::rpc::PushTaskReply* response)  override {
+      using Reactor = ray::rpc::RayServerUnaryReactor<ray::rpc::RayReactor<ray::rpc::PushTaskRequest, ray::rpc::PushTaskReply, grpc::ServerUnaryReactor>>;
+      auto reactor = rpc::MakeServerReactor<Reactor>(context);
+      service_handler_.HandlePushTask(*request, response, [reactor](Status status, auto, auto) {
+        reactor->Finish(RayStatusToGrpcStatus(status));
+      });
+      return reactor.get();
+    }
+    CoreWorkerServiceHandler &service_handler_;
+  };
+
   /// The grpc async service object.
   CoreWorkerService::AsyncService service_;
-
+  CallbackCoreWorkerServiceImpl callback_service_;
   /// The service handler that actually handles the requests.
   CoreWorkerServiceHandler &service_handler_;
 };

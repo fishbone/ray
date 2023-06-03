@@ -1,3 +1,6 @@
+#pragma once
+
+
 #include <grpcpp/server.h>
 
 #include <boost/asio.hpp>
@@ -42,7 +45,7 @@ struct RayReactor : public TReactor {
  protected:
   void Deref() {
     if (--ref_count_ == 0) {
-      RAY_LOG(INFO) << "Destroying reactor";
+      RAY_LOG(DEBUG) << "Destroying reactor";
       delete this;
     }
   }
@@ -63,11 +66,11 @@ class RayServerUnaryReactor : public TReactor {
   RayServerUnaryReactor(grpc::CallbackServerContext *server_context, Executor executor)
       : Reactor(std::move(executor)), server_context_(server_context) {}
   virtual ~RayServerUnaryReactor() {
-    RAY_LOG(ERROR) << "RayServerUnaryReactor destroyed";
+    RAY_LOG(DEBUG) << "RayServerUnaryReactor destroyed";
   }
 
   void Finish(const grpc::Status &status = grpc::Status::OK) {
-    RAY_LOG(ERROR) << "Server::Finish";
+    RAY_LOG(DEBUG) << "Server::Finish";
     if (!finished_) {
       finished_ = true;
       Reactor::Finish(status);
@@ -92,12 +95,12 @@ class RayServerUnaryReactor : public TReactor {
 
  private:
   void OnDone() override {
-    RAY_LOG(ERROR) << "ServerOnDone";
+    RAY_LOG(DEBUG) << "ServerOnDone";
     this->Deref();
   }
 
   void OnCancel() override {
-    RAY_LOG(ERROR) << "Server:OnCancel";
+    RAY_LOG(DEBUG) << "Server:OnCancel";
     Finish(grpc::Status::CANCELLED);
   }
 
@@ -293,7 +296,7 @@ class RayClientUnaryReactor : public TReactor {
   RayClientUnaryReactor(Executor executor) : Reactor(std::move(executor)) {}
 
   virtual ~RayClientUnaryReactor() {
-    RAY_LOG(ERROR) << "RayClientUnaryReactor destroyed";
+    RAY_LOG(DEBUG) << "RayClientUnaryReactor destroyed";
   }
 
   grpc::ClientContext &GetContext() { return client_context_; }
@@ -333,7 +336,7 @@ class RayClientUnaryReactor : public TReactor {
   void StartCall() {
     // Increase the ref count to make sure the reactor is alive until the call is done.
     // This will create a cirtular, but it'll be broken when OnDone is called in gRPC.
-    RAY_LOG(ERROR) << "hold_count_= " << hold_count_;
+    RAY_LOG(DEBUG) << "hold_count_= " << hold_count_;
     Reactor::AddMultipleHolds(hold_count_);
     Reactor::StartCall();
   }
@@ -343,7 +346,7 @@ class RayClientUnaryReactor : public TReactor {
 
   void RemoveHold() {
     --hold_count_;
-    RAY_LOG(INFO) << "Client:RemoveHold";
+    RAY_LOG(DEBUG) << "Client:RemoveHold";
     Reactor::RemoveHold();
   }
 
@@ -354,7 +357,7 @@ class RayClientUnaryReactor : public TReactor {
   }
 
   void OnDone(const grpc::Status &status) override {
-    RAY_LOG(ERROR) << "ClientOnDone";
+    RAY_LOG(DEBUG) << "ClientOnDone";
     {
       absl::MutexLock lock(&wait_callback_mutex_);
       if (wait_callback_) {
@@ -413,7 +416,7 @@ template <typename Reactor>
 std::shared_ptr<Reactor> MakeServerReactor(grpc::CallbackServerContext *context) {
   return std::shared_ptr<Reactor>(new Reactor(context, {}), [](auto p) {
     p->Finish();
-    RAY_LOG(INFO) << "Server::Deref";
+    RAY_LOG(DEBUG) << "Server::Deref";
     p->Deref();
   });
 }
@@ -421,7 +424,7 @@ std::shared_ptr<Reactor> MakeServerReactor(grpc::CallbackServerContext *context)
 template <typename Reactor>
 std::shared_ptr<Reactor> MakeClientReactor() {
   return std::shared_ptr<Reactor>(new Reactor({}), [](auto p) {
-    RAY_LOG(ERROR) << "Client::Deref";
+    RAY_LOG(DEBUG) << "Client::Deref";
     p->ClearHold();
     p->Deref();
   });

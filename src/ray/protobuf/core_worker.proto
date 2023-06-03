@@ -403,12 +403,15 @@ message ReportGeneratorItemReturnsRequest {
 
 message ReportGeneratorItemReturnsReply {}
 
+service CallbackCoreWorkerService {
+  // Push a task directly to this worker from another.
+  rpc PushTask(PushTaskRequest) returns (PushTaskReply);
+}
+
 service CoreWorkerService {
   // Notify core worker GCS has restarted.
   rpc RayletNotifyGCSRestart(RayletNotifyGCSRestartRequest)
       returns (RayletNotifyGCSRestartReply);
-  // Push a task directly to this worker from another.
-  rpc PushTask(PushTaskRequest) returns (PushTaskReply);
   // Reply from raylet that wait for direct actor call args has completed.
   rpc DirectActorCallArgWaitComplete(DirectActorCallArgWaitCompleteRequest)
       returns (DirectActorCallArgWaitCompleteReply);

@@ -206,6 +206,7 @@ CoreWorker::CoreWorker(const CoreWorkerOptions &options, const WorkerID &worker_
                                         assigned_port,
                                         options_.node_ip_address == "127.0.0.1");
   core_worker_server_->RegisterService(grpc_service_);
+  core_worker_server_->RegisterService(grpc_service_.GetCallbackService());
   core_worker_server_->Run();
 
   // Set our own address.
@@ -3054,61 +3055,63 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
 void CoreWorker::HandlePushTask(rpc::PushTaskRequest request,
                                 rpc::PushTaskReply *reply,
                                 rpc::SendReplyCallback send_reply_callback) {
-  RAY_LOG(DEBUG) << "Received Handle Push Task "
-                 << TaskID::FromBinary(request.task_spec().task_id());
-  if (HandleWrongRecipient(WorkerID::FromBinary(request.intended_worker_id()),
-                           send_reply_callback)) {
-    return;
-  }
-  if (request.task_spec().type() == TaskType::ACTOR_CREATION_TASK ||
-      request.task_spec().type() == TaskType::NORMAL_TASK) {
-    auto job_id = JobID::FromBinary(request.task_spec().job_id());
-    worker_context_.MaybeInitializeJobInfo(job_id, request.task_spec().job_config());
-    task_counter_.SetJobId(job_id);
-  }
-  // Increment the task_queue_length and per function counter.
-  task_queue_length_ += 1;
-  std::string func_name =
-      FunctionDescriptorBuilder::FromProto(request.task_spec().function_descriptor())
-          ->CallString();
-  task_counter_.IncPending(func_name, request.task_spec().attempt_number() > 0);
+  ((boost::asio::io_context&)io_service_).dispatch([=]() mutable {
+    RAY_LOG(DEBUG) << "Received Handle Push Task "
+                   << TaskID::FromBinary(request.task_spec().task_id());
+    if (HandleWrongRecipient(WorkerID::FromBinary(request.intended_worker_id()),
+                             send_reply_callback)) {
+      return;
+    }
+    if (request.task_spec().type() == TaskType::ACTOR_CREATION_TASK ||
+        request.task_spec().type() == TaskType::NORMAL_TASK) {
+      auto job_id = JobID::FromBinary(request.task_spec().job_id());
+      worker_context_.MaybeInitializeJobInfo(job_id, request.task_spec().job_config());
+      task_counter_.SetJobId(job_id);
+    }
+    // Increment the task_queue_length and per function counter.
+    task_queue_length_ += 1;
+    std::string func_name =
+        FunctionDescriptorBuilder::FromProto(request.task_spec().function_descriptor())
+        ->CallString();
+    task_counter_.IncPending(func_name, request.task_spec().attempt_number() > 0);
 
-  // For actor tasks, we just need to post a HandleActorTask instance to the task
-  // execution service.
-  if (request.task_spec().type() == TaskType::ACTOR_TASK) {
-    task_execution_service_.post(
-        [this,
-         request,
-         reply,
-         send_reply_callback = std::move(send_reply_callback),
-         func_name] {
-          // We have posted an exit task onto the main event loop,
-          // so shouldn't bother executing any further work.
-          if (IsExiting()) {
-            RAY_LOG(INFO) << "Queued task " << func_name
-                          << " won't be executed because the worker already exited.";
-            return;
-          }
-          direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
-        },
-        "CoreWorker.HandlePushTaskActor");
-  } else {
-    // Normal tasks are enqueued here, and we post a RunNormalTasksFromQueue instance to
-    // the task execution service.
-    direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
-    task_execution_service_.post(
-        [this, func_name] {
-          // We have posted an exit task onto the main event loop,
-          // so shouldn't bother executing any further work.
-          if (IsExiting()) {
-            RAY_LOG(INFO) << "Queued task " << func_name
-                          << " won't be executed because the worker already exited.";
-            return;
-          }
-          direct_task_receiver_->RunNormalTasksFromQueue();
-        },
-        "CoreWorker.HandlePushTask");
-  }
+    // For actor tasks, we just need to post a HandleActorTask instance to the task
+    // execution service.
+    if (request.task_spec().type() == TaskType::ACTOR_TASK) {
+      task_execution_service_.post(
+          [this,
+           request,
+           reply,
+           send_reply_callback = std::move(send_reply_callback),
+           func_name] {
+            // We have posted an exit task onto the main event loop,
+            // so shouldn't bother executing any further work.
+            if (IsExiting()) {
+              RAY_LOG(INFO) << "Queued task " << func_name
+                            << " won't be executed because the worker already exited.";
+              return;
+            }
+            direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
+          },
+          "CoreWorker.HandlePushTaskActor");
+    } else {
+      // Normal tasks are enqueued here, and we post a RunNormalTasksFromQueue instance to
+      // the task execution service.
+      direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
+      task_execution_service_.post(
+          [this, func_name] {
+            // We have posted an exit task onto the main event loop,
+            // so shouldn't bother executing any further work.
+            if (IsExiting()) {
+              RAY_LOG(INFO) << "Queued task " << func_name
+                            << " won't be executed because the worker already exited.";
+              return;
+            }
+            direct_task_receiver_->RunNormalTasksFromQueue();
+          },
+          "CoreWorker.HandlePushTask");
+    }
+  });
 }
 
 void CoreWorker::HandleDirectActorCallArgWaitComplete(
