@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <grpcpp/server.h>
 
 #include <boost/asio.hpp>

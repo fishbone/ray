@@ -128,19 +128,23 @@ class CoreWorkerGrpcService : public GrpcService {
   }
 
  private:
-  struct CallbackCoreWorkerServiceImpl final : public CallbackCoreWorkerService::CallbackService {
+  struct CallbackCoreWorkerServiceImpl final
+      : public CallbackCoreWorkerService::CallbackService {
    public:
     CallbackCoreWorkerServiceImpl(CoreWorkerServiceHandler &service_handler)
         : service_handler_(service_handler) {}
-    ::grpc::ServerUnaryReactor* PushTask(
-         ::grpc::CallbackServerContext* context,
-         const ray::rpc::PushTaskRequest* request,
-         ray::rpc::PushTaskReply* response)  override {
-      using Reactor = ray::rpc::RayServerUnaryReactor<ray::rpc::RayReactor<ray::rpc::PushTaskRequest, ray::rpc::PushTaskReply, grpc::ServerUnaryReactor>>;
+    ::grpc::ServerUnaryReactor *PushTask(::grpc::CallbackServerContext *context,
+                                         const ray::rpc::PushTaskRequest *request,
+                                         ray::rpc::PushTaskReply *response) override {
+      using Reactor =
+          ray::rpc::RayServerUnaryReactor<ray::rpc::RayReactor<ray::rpc::PushTaskRequest,
+                                                               ray::rpc::PushTaskReply,
+                                                               grpc::ServerUnaryReactor>>;
       auto reactor = rpc::MakeServerReactor<Reactor>(context);
-      service_handler_.HandlePushTask(*request, response, [reactor](Status status, auto, auto) {
-        reactor->Finish(RayStatusToGrpcStatus(status));
-      });
+      service_handler_.HandlePushTask(
+          *request, response, [reactor](Status status, auto, auto) {
+            reactor->Finish(RayStatusToGrpcStatus(status));
+          });
       return reactor.get();
     }
     CoreWorkerServiceHandler &service_handler_;

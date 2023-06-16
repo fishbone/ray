@@ -29,8 +29,8 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/hash/hash.h"
-#include "ray/common/status.h"
 #include "ray/common/rpc/context.h"
+#include "ray/common/status.h"
 #include "ray/pubsub/subscriber.h"
 #include "ray/rpc/grpc_client.h"
 #include "ray/util/logging.h"
@@ -224,7 +224,8 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
       : addr_(address), io_service_(client_call_manager.GetMainService()) {
     grpc_client_ = std::make_unique<GrpcClient<CoreWorkerService>>(
         addr_.ip_address(), addr_.port(), client_call_manager);
-    callback_stub_ = ray::rpc::CallbackCoreWorkerService::NewStub(grpc_client_->Channel());
+    callback_stub_ =
+        ray::rpc::CallbackCoreWorkerService::NewStub(grpc_client_->Channel());
   };
 
   const rpc::Address &Addr() const override { return addr_; }
@@ -361,16 +362,21 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
       // but we just set it to the default of -1 to avoid taking the lock.
       request->set_client_processed_up_to(-1);
 
-    auto client_context = std::make_shared<grpc::ClientContext>();
-    auto req = std::shared_ptr<PushTaskRequest>(std::move(request));
-    auto reply = std::make_shared<PushTaskReply>();
-    callback_stub_->async()->PushTask(
-        client_context.get(), req.get(), reply.get(),
-        [this, req, reply, client_context, callback](const grpc::Status& status) mutable {
-          boost::asio::dispatch(io_service_.get_executor(), [this, status, reply, callback = std::move(callback)]() mutable {
-            callback(GrpcStatusToRayStatus(status), *reply);
+      auto client_context = std::make_shared<grpc::ClientContext>();
+      auto req = std::shared_ptr<PushTaskRequest>(std::move(request));
+      auto reply = std::make_shared<PushTaskReply>();
+      callback_stub_->async()->PushTask(
+          client_context.get(),
+          req.get(),
+          reply.get(),
+          [this, req, reply, client_context, callback](
+              const grpc::Status &status) mutable {
+            boost::asio::dispatch(
+                io_service_.get_executor(),
+                [this, status, reply, callback = std::move(callback)]() mutable {
+                  callback(GrpcStatusToRayStatus(status), *reply);
+                });
           });
-        });
       return;
     }
 
@@ -392,11 +398,15 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
     auto req = std::shared_ptr<PushTaskRequest>(std::move(request));
     auto reply = std::make_shared<PushTaskReply>();
     callback_stub_->async()->PushTask(
-        client_context.get(), req.get(), reply.get(),
-        [this, req, reply, client_context, callback](const grpc::Status& status) mutable {
-          boost::asio::dispatch(io_service_.get_executor(), [this, status, reply, callback = std::move(callback)]() mutable {
-            callback(GrpcStatusToRayStatus(status), *reply);
-          });
+        client_context.get(),
+        req.get(),
+        reply.get(),
+        [this, req, reply, client_context, callback](const grpc::Status &status) mutable {
+          boost::asio::dispatch(
+              io_service_.get_executor(),
+              [this, status, reply, callback = std::move(callback)]() mutable {
+                callback(GrpcStatusToRayStatus(status), *reply);
+              });
         });
     // INVOKE_RPC_CALL(CoreWorkerService,
     //                 PushTask,
@@ -427,26 +437,35 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
       request->set_client_processed_up_to(max_finished_seq_no_);
       rpc_bytes_in_flight_ += task_size;
 
-      // using Reactor = rpc::RayClientUnaryReactor<rpc::RayReactor<PushTaskRequest, PushTaskReply, grpc::ClientUnaryReactor>>;
-      // auto reactor = rpc::MakeClientReactor<Reactor>();
-      callback_stub_->async()->PushTask(client_context.get(), request.get(), reply.get(),
-                                        [this, this_ptr, seq_no, task_size,
-                                         callback = std::move(pair.second),
-                                         request,
-                                         reply](auto status) mutable {
-                                          {
-                                            absl::MutexLock lock(&mutex_);
-                                            if (seq_no > max_finished_seq_no_) {
-                                              max_finished_seq_no_ = seq_no;
-                                            }
-                                            rpc_bytes_in_flight_ -= task_size;
-                                            RAY_CHECK(rpc_bytes_in_flight_ >= 0);
-                                          }
-                                          boost::asio::dispatch(io_service_.get_executor(), [this, status, reply, callback = std::move(callback)]() mutable {
-                                            SendRequests();
-                                            callback(GrpcStatusToRayStatus(status), *reply);
-                                          });
-                                        });
+      // using Reactor = rpc::RayClientUnaryReactor<rpc::RayReactor<PushTaskRequest,
+      // PushTaskReply, grpc::ClientUnaryReactor>>; auto reactor =
+      // rpc::MakeClientReactor<Reactor>();
+      callback_stub_->async()->PushTask(
+          client_context.get(),
+          request.get(),
+          reply.get(),
+          [this,
+           this_ptr,
+           seq_no,
+           task_size,
+           callback = std::move(pair.second),
+           request,
+           reply](auto status) mutable {
+            {
+              absl::MutexLock lock(&mutex_);
+              if (seq_no > max_finished_seq_no_) {
+                max_finished_seq_no_ = seq_no;
+              }
+              rpc_bytes_in_flight_ -= task_size;
+              RAY_CHECK(rpc_bytes_in_flight_ >= 0);
+            }
+            boost::asio::dispatch(
+                io_service_.get_executor(),
+                [this, status, reply, callback = std::move(callback)]() mutable {
+                  SendRequests();
+                  callback(GrpcStatusToRayStatus(status), *reply);
+                });
+          });
 
       // RAY_UNUSED(INVOKE_RPC_CALL(CoreWorkerService,
       //                            PushTask,
@@ -481,7 +500,7 @@ class CoreWorkerClient : public std::enable_shared_from_this<CoreWorkerClient>,
   std::deque<std::pair<std::unique_ptr<PushTaskRequest>, ClientCallback<PushTaskReply>>>
       send_queue_ GUARDED_BY(mutex_);
   std::unique_ptr<ray::rpc::CallbackCoreWorkerService::Stub> callback_stub_;
-  boost::asio::io_service& io_service_;
+  boost::asio::io_service &io_service_;
   /// The number of bytes currently in flight.
   int64_t rpc_bytes_in_flight_ GUARDED_BY(mutex_) = 0;
 

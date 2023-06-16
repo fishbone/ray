@@ -3055,7 +3055,7 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
 void CoreWorker::HandlePushTask(rpc::PushTaskRequest request,
                                 rpc::PushTaskReply *reply,
                                 rpc::SendReplyCallback send_reply_callback) {
-  ((boost::asio::io_context&)io_service_).dispatch([=]() mutable {
+  ((boost::asio::io_context &)io_service_).dispatch([=]() mutable {
     RAY_LOG(DEBUG) << "Received Handle Push Task "
                    << TaskID::FromBinary(request.task_spec().task_id());
     if (HandleWrongRecipient(WorkerID::FromBinary(request.intended_worker_id()),
@@ -3072,7 +3072,7 @@ void CoreWorker::HandlePushTask(rpc::PushTaskRequest request,
     task_queue_length_ += 1;
     std::string func_name =
         FunctionDescriptorBuilder::FromProto(request.task_spec().function_descriptor())
-        ->CallString();
+            ->CallString();
     task_counter_.IncPending(func_name, request.task_spec().attempt_number() > 0);
 
     // For actor tasks, we just need to post a HandleActorTask instance to the task
