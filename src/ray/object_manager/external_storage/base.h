@@ -5,25 +5,32 @@
 
 namespace ray {
 namespace object_store {
-class ExternalStorage {
+class File {
  public:
-  template <typename Token, typename ConstBuffer>
-  auto AsyncWriteSome(std::string_view key, const ConstBuffer &buffer, Token &&token) {
+  using FileFlags = boost::asio::file_base::flags;
+  using SeekBasis = boost::asio::file_base::seek_basis;
+
+  using MutableBuffer = boost::asio::mutable_buffer;
+  using ConstBuffer = boost::asio::const_buffer;
+
+  File() = default;
+
+  virtual bool Open(const std::string &file, FileFlags open_flags) { return false; }
+  template <typename Token, typename Buffer>
+  auto AsyncWriteSome(const Buffer &buffer, Token &&token) {
     return boost::asio::async_initiate<Token, void(Status)>(
-        [this, key, buffer = boost::asio::buffer(buffer.data(), buffer.size())](
+        [this, buffer = boost::asio::buffer(buffer.data(), buffer.size())](
             boost::asio::any_completion_handler<void(Status)> handle) {
-          DoWrite(key, buffer, std::move(handle));
+          DoWrite(buffer, std::move(handle));
         },
         std::forward<Token>(token));
   }
 
-  template <typename Token, typename MutableBuffer>
-  auto AsyncReadSome(std::string_view key, const MutableBuffer &buffer, Token &&token) {
+  template <typename Token, typename Buffer>
+  auto AsyncReadSome(const Buffer &buffer, Token &&token) {
     return boost::asio::async_initiate<Token, void(Status)>(
         [this,
-         key,
-         buffer = boost::asio::mutable_buffer((void *)(buffer.data()),
-                                              buffer.size())](
+         buffer = boost::asio::mutable_buffer((void *)(buffer.data()), buffer.size())](
             boost::asio::any_completion_handler<void(Status)> handle) {
           DoRead(key, buffer, std::move(handle));
         },
@@ -31,24 +38,25 @@ class ExternalStorage {
   }
 
   template <typename Token>
-  auto AsyncExists(std::string_view key, Token &&token) {
+  auto AsyncExists(Token &&token) {
     return boost::asio::async_initiate<Token, void(Status)>(
-        [this, key](boost::asio::any_completion_handler<void(Status)> handle) {
-          DoExists(key, std::move(handle));
+        [this](boost::asio::any_completion_handler<void(Status)> handle) {
+          DoExists(std::move(handle));
         },
         std::forward<Token>(token));
   }
 
   template <typename Token>
-  auto AsyncDelete(std::string_view key, Token &&token) {
+  auto AsyncDelete(Token &&token) {
     return boost::asio::async_initiate<Token, void(Status)>(
-        [this, key](boost::asio::any_completion_handler<void(Status)> handle) {
-          DoDelete(key, std::move(handle));
+        [this](boost::asio::any_completion_handler<void(Status)> handle) {
+          DoDelete(std::move(handle));
         },
         std::forward<Token>(token));
   }
 
-  virtual ~ExternalStorage() = default;
+  virtual uint64_t Seek(int64_t offset, asio::file_base::seek_basis whence) { return -1; }
+  virtual int64_t Size() const { return -1; }
 
  protected:
   template <typename Signature, typename... Args>
@@ -59,28 +67,24 @@ class ExternalStorage {
     boost::asio::dispatch(e, std::bind(std::move(handle), std::forward<Args>(args)...));
   }
 
-  virtual void DoWrite(std::string_view key,
-                       const boost::asio::const_buffer &data,
+  virtual void DoWrite(const boost::asio::const_buffer &data,
                        boost::asio::any_completion_handler<void(Status)> handle) {
     ExecuteCallback(std::move(handle),
                     Status::NotImplemented("Write hasn't been implemented"));
   }
 
-  virtual void DoRead(std::string_view key,
-                      const boost::asio::mutable_buffer &buffer,
+  virtual void DoRead(const boost::asio::mutable_buffer &buffer,
                       boost::asio::any_completion_handler<void(Status)> handle) {
     ExecuteCallback(std::move(handle),
                     Status::NotImplemented("Read hasn't been implemented"));
   }
 
-  virtual void DoExists(std::string_view key,
-                        boost::asio::any_completion_handler<void(Status)> handle) {
+  virtual void DoExists(boost::asio::any_completion_handler<void(Status)> handle) {
     ExecuteCallback(std::move(handle),
                     Status::NotImplemented("Exsits hasn't been implemented"));
   }
 
-  virtual void DoDelete(std::string_view key,
-                        boost::asio::any_completion_handler<void(Status)> handle) {
+  virtual void DoDelete(boost::asio::any_completion_handler<void(Status)> handle) {
     ExecuteCallback(std::move(handle),
                     Status::NotImplemented("Delete hasn't been implemented"));
   }
