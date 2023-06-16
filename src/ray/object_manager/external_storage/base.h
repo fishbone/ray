@@ -22,7 +22,7 @@ class ExternalStorage {
     return boost::asio::async_initiate<Token, void(Status)>(
         [this,
          key,
-         buffer = boost::asio::mutable_buffer(static_cast<void *>(buffer.data()),
+         buffer = boost::asio::mutable_buffer((void *)(buffer.data()),
                                               buffer.size())](
             boost::asio::any_completion_handler<void(Status)> handle) {
           DoRead(key, buffer, std::move(handle));
