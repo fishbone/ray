@@ -775,6 +775,13 @@ void NodeManager::HandleGetTasksInfo(rpc::GetTasksInfoRequest request,
       /*on_all_replied*/ [total, reply]() { reply->set_total(*total); });
 }
 
+void NodeManager::HandleDrainObjectStore(rpc::DrainObjectStoreRequest request,
+                                         rpc::DrainObjectStoreReply *reply,
+                                         rpc::SendReplyCallback send_reply_callback) {
+  RAY_LOG(DEBUG) << "Received a HandleDrainObjectStore request";
+  send_reply_callback(Status::OK(), nullptr, nullptr);
+}
+
 void NodeManager::HandleGetObjectsInfo(rpc::GetObjectsInfoRequest request,
                                        rpc::GetObjectsInfoReply *reply,
                                        rpc::SendReplyCallback send_reply_callback) {

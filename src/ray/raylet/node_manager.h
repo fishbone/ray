@@ -591,6 +591,10 @@ class NodeManager : public rpc::NodeManagerServiceHandler,
                               rpc::NotifyGCSRestartReply *reply,
                               rpc::SendReplyCallback send_reply_callback) override;
 
+  void HandleDrainObjectStore(rpc::DrainObjectStoreRequest request,
+                              rpc::DrainObjectStoreReply *reply,
+                              rpc::SendReplyCallback send_reply_callback) override;
+
   /// Trigger local GC on each worker of this raylet.
   void DoLocalGC(bool triggered_by_global_gc = false);
 
