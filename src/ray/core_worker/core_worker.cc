@@ -1092,6 +1092,7 @@ void CoreWorker::RegisterOwnershipInfoAndResolveFuture(
     const std::string &serialized_object_status) {
   // Add the object's owner to the local metadata in case it gets serialized
   // again.
+  
   reference_counter_->AddBorrowedObject(object_id, outer_object_id, owner_address);
 
   rpc::GetObjectStatusReply object_status;

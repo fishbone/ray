@@ -18,6 +18,7 @@ build:linux --force_pic
 build:macos --force_pic
 build:clang-cl --compiler=clang-cl
 build:msvc-cl --compiler=msvc-cl
+
 # `LC_ALL` and `LANG` is needed for cpp worker tests, because they will call "ray start".
 # If we don't add them, python's `click` library will raise an error.
 test --test_env=LC_ALL
@@ -38,6 +39,7 @@ build:windows --enable_runfiles
 #                 for compiling assembly files is fixed on Windows:
 #                 https://github.com/bazelbuild/bazel/issues/8924
 # Warnings should be errors
+
 build:linux    --per_file_copt="-\\.(asm|S)$@-Werror"
 build:macos    --per_file_copt="-\\.(asm|S)$@-Werror"
 build:clang-cl --per_file_copt="-\\.(asm|S)$@-Werror"
@@ -46,7 +48,7 @@ build:msvc-cl     --per_file_copt="-\\.(asm|S)$@-WX"
 build --per_file_copt="\\.pb\\.cc$@-w"
 build:linux --per_file_copt="-\\.(asm|S)$,external/.*@-w,-Wno-error=implicit-function-declaration"
 build:macos --per_file_copt="-\\.(asm|S)$,external/.*@-w,-Wno-error=implicit-function-declaration"
-# Ignore minor warnings for host tools, which we generally can't control
+# Ignore minor warnings for host ray_config_def.htools, which we generally can't control
 build:clang-cl --host_copt="-Wno-inconsistent-missing-override"
 build:clang-cl --host_copt="-Wno-microsoft-unqualified-friend"
 # This workaround is needed due to https://github.com/bazelbuild/bazel/issues/4341

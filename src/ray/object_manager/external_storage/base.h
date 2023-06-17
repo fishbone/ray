@@ -5,17 +5,60 @@
 
 namespace ray {
 namespace object_store {
-class File {
- public:
-  using FileFlags = boost::asio::file_base::flags;
-  using SeekBasis = boost::asio::file_base::seek_basis;
 
+namespace {
+template<typename CompletionToken, typename ... Args>
+auto Dispatch(CompletionToken&& token, Args&&...args) {
+  auto e = boost::asio::get_associated_executor(token);
+  RAY_CHECK(e) << "Invalid executor";
+  boost::asio::dispatch(e, std::bind(std::forward<CompletionToken>(token), std::forward<Args>(args)...));
+}
+}
+
+enum struct FileFlags { READ = 0, WRITE = 1 };
+
+class File;
+
+class FileManager {
+ public:
+  virtual ~FileManager() = default;
+
+  virtual std::unique_ptr<File> Open(const std::string &file, FileFlags flags) = 0;
+
+  template <typename Token>
+  auto AsyncExists(const std::string& file, Token &&token) {
+    return boost::asio::async_initiate<Token, void(Status)>(
+        [this, file](boost::asio::any_completion_handler<void(Status)> handle) {
+          DoExists(file, std::move(handle));
+        },
+        std::forward<Token>(token));
+  }
+
+  template <typename Token>
+  auto AsyncDelete(const std::string &file, Token &&token) {
+    return boost::asio::async_initiate<Token, void(Status)>(
+        [this, file](boost::asio::any_completion_handler<void(Status)> handle) {
+          DoDelete(file, std::move(handle));
+        },
+        std::forward<Token>(token));
+  }
+
+ private:
+  virtual void DoExists(
+    const std::string& file, boost::asio::any_completion_handler<void(Status)> handle) = 0;
+  virtual void DoDelete(
+    const std::string& file, boost::asio::any_completion_handler<void(Status)> handle) = 0;
+};
+
+class File {
+public:
   using MutableBuffer = boost::asio::mutable_buffer;
   using ConstBuffer = boost::asio::const_buffer;
-
+  virtual ~File() = default;
   File() = default;
+  virtual uint64_t Seek(int64_t offset) = 0;
+  virtual int64_t Size() const = 0;
 
-  virtual bool Open(const std::string &file, FileFlags open_flags) { return false; }
   template <typename Token, typename Buffer>
   auto AsyncWriteSome(const Buffer &buffer, Token &&token) {
     return boost::asio::async_initiate<Token, void(Status)>(
@@ -32,62 +75,17 @@ class File {
         [this,
          buffer = boost::asio::mutable_buffer((void *)(buffer.data()), buffer.size())](
             boost::asio::any_completion_handler<void(Status)> handle) {
-          DoRead(key, buffer, std::move(handle));
+          DoRead(buffer, std::move(handle));
         },
         std::forward<Token>(token));
   }
-
-  template <typename Token>
-  auto AsyncExists(Token &&token) {
-    return boost::asio::async_initiate<Token, void(Status)>(
-        [this](boost::asio::any_completion_handler<void(Status)> handle) {
-          DoExists(std::move(handle));
-        },
-        std::forward<Token>(token));
-  }
-
-  template <typename Token>
-  auto AsyncDelete(Token &&token) {
-    return boost::asio::async_initiate<Token, void(Status)>(
-        [this](boost::asio::any_completion_handler<void(Status)> handle) {
-          DoDelete(std::move(handle));
-        },
-        std::forward<Token>(token));
-  }
-
-  virtual uint64_t Seek(int64_t offset, asio::file_base::seek_basis whence) { return -1; }
-  virtual int64_t Size() const { return -1; }
-
- protected:
-  template <typename Signature, typename... Args>
-  void ExecuteCallback(boost::asio::any_completion_handler<Signature> handle,
-                       Args &&...args) {
-    auto e = boost::asio::get_associated_executor(handle);
-    RAY_CHECK(e) << "Invalid executor";
-    boost::asio::dispatch(e, std::bind(std::move(handle), std::forward<Args>(args)...));
-  }
-
+private:
   virtual void DoWrite(const boost::asio::const_buffer &data,
-                       boost::asio::any_completion_handler<void(Status)> handle) {
-    ExecuteCallback(std::move(handle),
-                    Status::NotImplemented("Write hasn't been implemented"));
-  }
+                       boost::asio::any_completion_handler<void(Status)> handle) = 0;
 
   virtual void DoRead(const boost::asio::mutable_buffer &buffer,
-                      boost::asio::any_completion_handler<void(Status)> handle) {
-    ExecuteCallback(std::move(handle),
-                    Status::NotImplemented("Read hasn't been implemented"));
-  }
-
-  virtual void DoExists(boost::asio::any_completion_handler<void(Status)> handle) {
-    ExecuteCallback(std::move(handle),
-                    Status::NotImplemented("Exsits hasn't been implemented"));
-  }
-
-  virtual void DoDelete(boost::asio::any_completion_handler<void(Status)> handle) {
-    ExecuteCallback(std::move(handle),
-                    Status::NotImplemented("Delete hasn't been implemented"));
-  }
+                      boost::asio::any_completion_handler<void(Status)> handle) = 0;
 };
+
 }  // namespace object_store
 }  // namespace ray

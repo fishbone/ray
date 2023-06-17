@@ -1325,7 +1325,7 @@ cc_test(
     copts = COPTS,
     tags = ["team:core"],
     deps = [
-        ":object_manager",
+        ":external_storage",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -2401,6 +2401,22 @@ cc_test(
 )
 
 cc_library(
+    name = "external_storage",
+    hdrs = [
+        "src/ray/object_manager/external_storage/base.h",
+        "src/ray/object_manager/external_storage/localfile.h",
+    ],
+    srcs = [
+        "src/ray/object_manager/external_storage/localfile.cc",
+    ],
+    deps = [
+        ":ray_util",
+        "@boost//:asio",
+    ],
+    strip_include_prefix = "src",
+)
+
+cc_library(
     name = "object_manager",
     srcs = glob([
         "src/ray/object_manager/*.cc",
@@ -2408,7 +2424,6 @@ cc_library(
     ]),
     hdrs = glob([
         "src/ray/object_manager/*.h",
-        "src/ray/object_manager/external_storage/*.h",
         "src/ray/object_manager/notification/*.h",
     ]),
     copts = COPTS,
@@ -2420,6 +2435,7 @@ cc_library(
         ":plasma_store_server_lib",
         ":ray_common",
         ":ray_util",
+        ":external_storage",
         "@boost//:asio",
     ],
 )
