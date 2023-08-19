@@ -236,6 +236,9 @@ void GcsServer::DoStart(const GcsInitData &gcs_init_data) {
   // Init autoscaling manager
   InitGcsAutoscalerStateManager();
 
+  debug_service_ = std::make_unique<GcsDebugService>(main_service_);
+  rpc_server_.RegisterService(*debug_service_);
+
   // Start RPC server when all tables have finished loading initial
   // data.
   rpc_server_.Run();
