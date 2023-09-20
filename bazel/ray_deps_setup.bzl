@@ -360,7 +360,14 @@ def ray_deps_setup():
     http_archive(
         name = "jemalloc",
         urls = ["https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"],
-         build_file = "@com_github_ray_project_ray//bazel:BUILD.jemalloc",
+        build_file = "@com_github_ray_project_ray//bazel:BUILD.jemalloc",
         sha256 = "2db82d1e7119df3e71b7640219b6dfe84789bc0537983c3b7ac4f7189aecfeaa",
         strip_prefix = "jemalloc-5.3.0",
-     )
+    )
+
+    git_repository(
+        name = "capnp-cpp",
+        remote = "https://github.com/capnproto/capnproto.git",
+        strip_prefix = "c++",
+        tag = "v1.0.1",
+    )

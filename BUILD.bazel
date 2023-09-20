@@ -2120,6 +2120,11 @@ alias(
     actual = "@com_github_redis_hiredis//:hiredis",
 )
 
+alias(
+    name = "capnp_runtime",
+    actual = "@capnp-cpp//src/capnp:capnp_runtime",
+)
+
 ray_cc_library(
     name = "redis_client",
     srcs = [
