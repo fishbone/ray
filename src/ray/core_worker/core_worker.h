@@ -36,6 +36,7 @@
 #include "ray/core_worker/transport/direct_actor_transport.h"
 #include "ray/core_worker/transport/direct_task_transport.h"
 #include "ray/gcs/gcs_client/gcs_client.h"
+#include "src/ray/capnp/ray_task.capnp.h"
 #include "ray/pubsub/publisher.h"
 #include "ray/pubsub/subscriber.h"
 #include "ray/raylet_client/raylet_client.h"
@@ -282,7 +283,8 @@ class TaskToRetryDescComparator {
 /// The root class that contains all the core and language-independent functionalities
 /// of the worker. This class is supposed to be used to implement app-language (Java,
 /// Python, etc) workers.
-class CoreWorker : public rpc::CoreWorkerServiceHandler {
+class CoreWorker : public rpc::CoreWorkerServiceHandler,
+                   public ray::capnp::core_worker::CoreWorkerService::Server {
  public:
   /// Construct a CoreWorker instance.
   ///
@@ -1116,6 +1118,8 @@ class CoreWorker : public rpc::CoreWorkerServiceHandler {
   void HandlePushTask(rpc::PushTaskRequest request,
                       rpc::PushTaskReply *reply,
                       rpc::SendReplyCallback send_reply_callback) override;
+
+  ::kj::Promise<void> pushTask(PushTaskContext context) override;
 
   /// Implements gRPC server handler.
   void HandleDirectActorCallArgWaitComplete(

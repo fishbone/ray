@@ -49,6 +49,20 @@ uint64_t MurmurHash64A(const void *key, int len, unsigned int seed);
 // Change the compiler alignment to 1 byte (default is 8).
 #pragma pack(push, 1)
 
+inline unsigned char hex_to_uchar(const char c, bool &err) {
+  unsigned char num = 0;
+  if (c >= '0' && c <= '9') {
+    num = c - '0';
+  } else if (c >= 'a' && c <= 'f') {
+    num = c - 'a' + 0xa;
+  } else if (c >= 'A' && c <= 'F') {
+    num = c - 'A' + 0xA;
+  } else {
+    err = true;
+  }
+  return num;
+}
+
 /// The `ID`s of Ray.
 ///
 /// Please refer to the specification of Ray UniqueIDs.
@@ -60,8 +74,41 @@ class BaseID {
   BaseID();
   // Warning: this can duplicate IDs after a fork() call. We assume this never happens.
   static T FromRandom();
-  static T FromBinary(const std::string &binary);
-  static T FromHex(const std::string &hex_str);
+  template<typename V>
+  static T FromBinary(const V& binary) {
+    RAY_CHECK(binary.size() == T::Size() || binary.size() == 0)
+        << "expected size is " << T::Size() << ", but got data size is " << binary.size();
+    T t;
+    std::memcpy(t.MutableData(), &binary.front(), binary.size());
+    return t;
+  }
+
+  template<typename V>
+  static T FromHex(const V& hex_str) {
+    T id;
+
+    if (2 * T::Size() != hex_str.size()) {
+      RAY_LOG(ERROR) << "incorrect hex string length: 2 * " << T::Size()
+                     << " != " << hex_str.size() << ", hex string: " << hex_str;
+      return T::Nil();
+    }
+
+    uint8_t *data = id.MutableData();
+    for (size_t i = 0; i < T::Size(); i++) {
+      char first = hex_str[2 * i];
+      char second = hex_str[2 * i + 1];
+      bool err = false;
+      data[i] = (hex_to_uchar(first, err) << 4) + hex_to_uchar(second, err);
+      if (err) {
+        RAY_LOG(ERROR) << "incorrect hex character, hex string: " << hex_str;
+        return T::Nil();
+      }
+    }
+
+    return id;
+
+  }
+
   static const T &Nil();
   static constexpr size_t Size() { return T::Size(); }
 
@@ -427,54 +474,6 @@ T BaseID<T>::FromRandom() {
   std::string data(T::Size(), 0);
   FillRandom(&data);
   return T::FromBinary(data);
-}
-
-template <typename T>
-T BaseID<T>::FromBinary(const std::string &binary) {
-  RAY_CHECK(binary.size() == T::Size() || binary.size() == 0)
-      << "expected size is " << T::Size() << ", but got data size is " << binary.size();
-  T t;
-  std::memcpy(t.MutableData(), binary.data(), binary.size());
-  return t;
-}
-
-inline unsigned char hex_to_uchar(const char c, bool &err) {
-  unsigned char num = 0;
-  if (c >= '0' && c <= '9') {
-    num = c - '0';
-  } else if (c >= 'a' && c <= 'f') {
-    num = c - 'a' + 0xa;
-  } else if (c >= 'A' && c <= 'F') {
-    num = c - 'A' + 0xA;
-  } else {
-    err = true;
-  }
-  return num;
-}
-
-template <typename T>
-T BaseID<T>::FromHex(const std::string &hex_str) {
-  T id;
-
-  if (2 * T::Size() != hex_str.size()) {
-    RAY_LOG(ERROR) << "incorrect hex string length: 2 * " << T::Size()
-                   << " != " << hex_str.size() << ", hex string: " << hex_str;
-    return T::Nil();
-  }
-
-  uint8_t *data = id.MutableData();
-  for (size_t i = 0; i < T::Size(); i++) {
-    char first = hex_str[2 * i];
-    char second = hex_str[2 * i + 1];
-    bool err = false;
-    data[i] = (hex_to_uchar(first, err) << 4) + hex_to_uchar(second, err);
-    if (err) {
-      RAY_LOG(ERROR) << "incorrect hex character, hex string: " << hex_str;
-      return T::Nil();
-    }
-  }
-
-  return id;
 }
 
 template <typename T>

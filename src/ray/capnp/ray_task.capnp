@@ -30,6 +30,24 @@ enum Language {
   kCpp @2;
 }
 
+
+# Represents a resource id.
+struct ResourceId {
+  # The index of the resource (i.e., CPU #3).
+  index @0 : Int64;
+  # The quantity of the resource assigned (i.e., 0.5 CPU).
+  quantity @1 : Float64;
+}
+
+# Represents a set of resource ids.
+struct ResourceMapEntry {
+  # The name of the resource (i.e., "CPU").
+  name @0 : Text;
+  # The set of resource ids assigned.
+  resourceIds @1 : List(ResourceId);
+}
+
+
 struct ObjectReference {
   # ObjectID that the worker has a reference to.
   objectId @0 : Data;
@@ -282,4 +300,110 @@ struct TaskSpec {
   # Number of return values from a completed streaming generator return.
   # The value is set only when a task is completed once.
   numStreamingGeneratorReturns @33 : Int64;
+}
+
+struct PushTaskRequest {
+    intendedWorkerId @0 : Data;
+    taskSpec @1 : TaskSpec;
+    sequenceNumber @2 : Int64;
+    clientProcessedUpTo @3 : Int64;
+    resourceMapping @4 : List(ResourceMapEntry);
+}
+
+struct ReturnObject {
+  # Object ID.
+  objectId @0 : Data;
+  # If set, indicates the data is in plasma instead of inline. This
+  # means that data and metadata will be empty.
+  inPlasma @1 : Bool;
+  # Data of the object.
+  data @2 : Data;
+  # Metadata of the object.
+  metadata @3 : Data;
+  # ObjectIDs that were nested in data. This is only set for inlined objects.
+  nestedInlinedRefs @4 : List(ObjectReference);
+  # Size of this object.
+  size @5 : Int64;
+}
+
+
+struct ObjectReferenceCount {
+  # The reference that the worker has or had a reference to.
+  reference @0 : ObjectReference;
+  # Whether the worker is still using the ObjectID locally. This means that
+  # it has a copy of the ObjectID in the language frontend, has a pending task
+  # that depends on the object, and/or owns an ObjectID that is in scope and
+  # that contains the ObjectID.
+  hasLocalRef @1 : Bool;
+  # Any other borrowers that the worker created (by passing the ID on to them).
+  borrowers @2 : List(Address);
+  # The borrower may have returned the object ID nested inside the return
+  # value of a task that it executed. This list contains all task returns that
+  # were owned by a process other than the borrower. Then, the process that
+  # owns the task's return value is also a borrower for as long as it has the
+  # task return ID in scope. Note that only the object ID and owner address
+  # are used for elements in this list.
+  storedInObjects @3 : List(ObjectReference);
+  # The borrowed object ID that contained this object, if any. This is used
+  # for nested object IDs.
+  containedInBorrowedIds @4 : List(Data);
+  # The object IDs that this object contains, if any. This is used for nested
+  # object IDs.
+  contains @5 : List(Data);
+}
+
+struct StreamingGeneratorReturnIdInfo {
+  # The object ID of a streaming generator return.
+  objectId @0 : Data;
+  # Whether or not if the object is in plasma store.
+  isPlasmaObject @1 : Bool;
+}
+
+struct PushTaskReply {
+  # The returned objects.
+  returnObjects @0 : List(ReturnObject);
+  # Dynamically created objects. These are objects whose refs were allocated
+  # by the task at run time instead of by the task caller at f.remote() time.
+  # We need to notify the task caller that they own these objects. The
+  # language-level ObjectRefs should be returned inside one of the statically
+  # allocated return objects.
+  dynamicReturnObjects @1 : List(ReturnObject);
+  # Set to true if the worker will be exiting.
+  workerExiting @2 : Bool;
+  # The references that the worker borrowed during the task execution. A
+  # borrower is a process that is currently using the object ID, in one of 3
+  # ways:
+  # 1. Has an ObjectID copy in Python.
+  # 2. Has submitted a task that depends on the object and that is still
+  # pending.
+  # 3. Owns another object that is in scope and whose value contains the
+  # ObjectID.
+  # This list includes the reference counts for any IDs that were passed to
+  # the worker in the task spec as an argument by reference, or an ObjectID
+  # that was serialized in an inlined argument. It also includes reference
+  # counts for any IDs that were nested inside these objects that the worker
+  # may now be borrowing. The reference counts also include any new borrowers
+  # that the worker created by passing a borrowed ID into a nested task.
+  borrowedRefs @3 : List(ObjectReferenceCount);
+  # Whether the result contains a retryable application-level error.
+  isRetryableError @4 : Bool;
+  # Whether the result contains an application-level error.
+  isApplicationError @5 : Bool;
+  # Whether the task was cancelled before it started running (i.e. while queued).
+  wasCancelledBeforeRunning @6 : Bool;
+  # If the task was an actor creation task, and the actor class has a customized
+  # repr defined for the anonymous actor (not a named actor), the repr name of the
+  # actor will be piggybacked to GCS to be included as part of ActorTableData.
+  actorReprName @7 : Text;
+  # The pushed task executing error detail message. Either from the application or
+  # from the core worker. This is only set when the task execution failed.
+  # Default to empty string (not set) when no error happens.
+  taskExecutionError @8 : Text;
+  # A list of streaming generator return IDs and whether
+  # they are stored in a plasma store.
+  streamingGeneratorReturnIds @9 : List(StreamingGeneratorReturnIdInfo);
+}
+
+interface CoreWorkerService {
+    pushTask @0 (request : PushTaskRequest) -> (reply: PushTaskReply);
 }

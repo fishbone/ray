@@ -6,4 +6,5 @@ cc_capnp_library(
         "ray_task.capnp",
         "ray_runtime_env.capnp",
     ],
+    visibility = ["//visibility:public"],
 )

@@ -3063,6 +3063,18 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
   return Status::OK();
 }
 
+::kj::Promise<void> CoreWorker::pushTask(PushTaskContext context) {
+  auto request = context.getParams().getRequest();
+  auto task_id = request.getTaskSpec().getTaskId();
+  RAY_LOG(DEBUG) << "Received Handle Push Task "
+                 << TaskID::FromBinary(task_id);
+  // if (HandleWrongRecipient(WorkerID::FromBinary(request.getIntendedWorkerId()),
+  //                          send_reply_callback)) {
+  //   return;
+  // }
+  return ::kj::READY_NOW;
+}
+
 void CoreWorker::HandlePushTask(rpc::PushTaskRequest request,
                                 rpc::PushTaskReply *reply,
                                 rpc::SendReplyCallback send_reply_callback) {

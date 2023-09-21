@@ -777,6 +777,8 @@ ray_cc_library(
         ":raylet_client_lib",
         ":stats_lib",
         ":worker_rpc",
+        "@capnp-cpp//src/capnp:capnp_runtime",
+        "//src/ray/capnp:ray_capnp",
         "//src/ray/protobuf:worker_cc_proto",
         "//src/ray/util",
         "@boost//:circular_buffer",
