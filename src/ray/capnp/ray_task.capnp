@@ -30,6 +30,11 @@ enum Language {
   kCpp @2;
 }
 
+struct Status {
+    code @0 : Int64;
+    msg @1 : Text;
+    rpcCode @2 : Int32;
+}
 
 # Represents a resource id.
 struct ResourceId {
@@ -206,7 +211,8 @@ struct TaskSpec {
   # Language of this task.
   language @2 : Language;
   # Function descriptor of this task uniquely describe the function to execute.
-  functionDescriptor @3 : FunctionDescriptor;
+  # functionDescriptor @3 : FunctionDescriptor;
+  functionDescriptor @3 : Data;
   # ID of the job that this task belongs to.
   jobId @4 : Data;
   # Task ID of the task.
@@ -278,7 +284,8 @@ struct TaskSpec {
   # objects.
   dynamicReturnIds @27 : List(Data);
   # Job config for the task. Only set for normal task or actor creation task.
-  jobConfig @28 : JobConfig;
+  # jobConfig @28 : JobConfig;
+  jobConfig @28 : Data;
   # TODO(rickyx): Remove this once we figure out a way to handle task ids
   # across multiple threads properly.
   # The task id of the CoreWorker's main thread from which the task is submitted.
@@ -405,5 +412,5 @@ struct PushTaskReply {
 }
 
 interface CoreWorkerService {
-    pushTask @0 (request : PushTaskRequest) -> (reply: PushTaskReply);
+    pushTask @0 (request : PushTaskRequest) -> (status : Status, reply: PushTaskReply);
 }

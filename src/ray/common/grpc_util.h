@@ -19,6 +19,8 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <grpcpp/grpcpp.h>
 
+#include <boost/iostreams/device/array.hpp>
+#include <boost/iostreams/stream.hpp>
 #include <sstream>
 
 #include "absl/container/flat_hash_map.h"
@@ -138,7 +140,7 @@ inline std::vector<ID> IdVectorFromProtobuf(
     const ::google::protobuf::RepeatedPtrField<::std::string> &pb_repeated) {
   auto str_vec = VectorFromProtobuf(pb_repeated);
   std::vector<ID> ret;
-  for(auto& id : str_vec) {
+  for (auto &id : str_vec) {
     ret.push_back(ID::FromBinary(id));
   }
   return ret;
@@ -160,6 +162,15 @@ inline grpc::ChannelArguments CreateDefaultChannelArguments() {
                      ::RayConfig::instance().grpc_client_keepalive_timeout_ms());
   }
   return arguments;
+}
+
+template <typename T, typename V>
+T MakeProtobuf(const V &v) {
+  boost::iostreams::stream<boost::iostreams::array_source> in((char *)v.begin(),
+                                                              v.size());
+  T t;
+  t.ParseFromIstream(&in);
+  return t;
 }
 
 }  // namespace ray

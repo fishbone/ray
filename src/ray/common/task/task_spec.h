@@ -241,7 +241,7 @@ static inline rpc::ObjectReference GetReferenceForActorDummyObject(
 /// Wrapper class of protobuf `TaskSpec`, see `common.proto` for details.
 /// TODO(ekl) we should consider passing around std::unique_ptr<TaskSpecification>
 /// instead `const TaskSpecification`, since this class is actually mutable.
-class TaskSpecification : public MessageWrapper<rpc::TaskSpec> {
+class TaskSpecification {
  public:
   /// Construct an empty task specification. This should not be used directly.
   TaskSpecification() { ComputeResources(); }
@@ -251,27 +251,28 @@ class TaskSpecification : public MessageWrapper<rpc::TaskSpec> {
   ///
   /// \param message The protobuf message.
   explicit TaskSpecification(rpc::TaskSpec &&message)
-      : MessageWrapper(std::move(message)) {
+      : message_(std::make_shared<rpc::TaskSpec>(std::move(message))) {
     ComputeResources();
   }
 
-  explicit TaskSpecification(const rpc::TaskSpec &message) : MessageWrapper(message) {
+  explicit TaskSpecification(const rpc::TaskSpec &message)
+      : message_(std::make_shared<rpc::TaskSpec>(message)) {
     ComputeResources();
   }
 
   /// Construct from a protobuf message shared_ptr.
   ///
   /// \param message The protobuf message.
-  explicit TaskSpecification(std::shared_ptr<rpc::TaskSpec> message)
-      : MessageWrapper(message) {
+  explicit TaskSpecification(std::shared_ptr<rpc::TaskSpec> message) : message_(message) {
     ComputeResources();
   }
 
   /// Construct from protobuf-serialized binary.
   ///
   /// \param serialized_binary Protobuf-serialized binary.
-  explicit TaskSpecification(const std::string &serialized_binary)
-      : MessageWrapper(serialized_binary) {
+  explicit TaskSpecification(const std::string &serialized_binary) {
+    message_ = std::make_shared<rpc::TaskSpec>();
+    message_->ParseFromString(serialized_binary);
     ComputeResources();
   }
 
@@ -505,6 +506,8 @@ class TaskSpecification : public MessageWrapper<rpc::TaskSpec> {
   static absl::flat_hash_map<SchedulingClass, SchedulingClassDescriptor> sched_id_to_cls_
       ABSL_GUARDED_BY(mutex_);
   static int next_sched_id_ ABSL_GUARDED_BY(mutex_);
+
+  std::shared_ptr<rpc::TaskSpec> message_;
 };
 
 /// \class WorkerCacheKey

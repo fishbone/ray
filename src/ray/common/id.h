@@ -74,8 +74,8 @@ class BaseID {
   BaseID();
   // Warning: this can duplicate IDs after a fork() call. We assume this never happens.
   static T FromRandom();
-  template<typename V>
-  static T FromBinary(const V& binary) {
+  template <typename V>
+  static T FromBinary(const V &binary) {
     RAY_CHECK(binary.size() == T::Size() || binary.size() == 0)
         << "expected size is " << T::Size() << ", but got data size is " << binary.size();
     T t;
@@ -83,8 +83,8 @@ class BaseID {
     return t;
   }
 
-  template<typename V>
-  static T FromHex(const V& hex_str) {
+  template <typename V>
+  static T FromHex(const V &hex_str) {
     T id;
 
     if (2 * T::Size() != hex_str.size()) {
@@ -106,7 +106,6 @@ class BaseID {
     }
 
     return id;
-
   }
 
   static const T &Nil();
@@ -433,26 +432,33 @@ std::ostream &operator<<(std::ostream &os, const TaskID &id);
 std::ostream &operator<<(std::ostream &os, const ObjectID &id);
 std::ostream &operator<<(std::ostream &os, const PlacementGroupID &id);
 
-#define DEFINE_UNIQUE_ID(type)                                                           \
-  class RAY_EXPORT type : public UniqueID {                                              \
-   public:                                                                               \
-    explicit type(const UniqueID &from) {                                                \
-      std::memcpy(&id_, from.Data(), kUniqueIDSize);                                     \
-    }                                                                                    \
-    type() : UniqueID() {}                                                               \
-    static type FromRandom() { return type(UniqueID::FromRandom()); }                    \
-    static type FromBinary(const std::string &binary) { return type(binary); }           \
-    static type FromHex(const std::string &hex) { return type(UniqueID::FromHex(hex)); } \
-    static type Nil() { return type(UniqueID::Nil()); }                                  \
-    static constexpr size_t Size() { return kUniqueIDSize; }                             \
-                                                                                         \
-   private:                                                                              \
-    explicit type(const std::string &binary) {                                           \
-      RAY_CHECK(binary.size() == Size() || binary.size() == 0)                           \
-          << "expected size is " << Size() << ", but got data " << binary << " of size " \
-          << binary.size();                                                              \
-      std::memcpy(&id_, binary.data(), binary.size());                                   \
-    }                                                                                    \
+#define DEFINE_UNIQUE_ID(type)                                                          \
+  class RAY_EXPORT type : public UniqueID {                                             \
+   public:                                                                              \
+    explicit type(const UniqueID &from) {                                               \
+      std::memcpy(&id_, from.Data(), kUniqueIDSize);                                    \
+    }                                                                                   \
+    type() : UniqueID() {}                                                              \
+    static type FromRandom() { return type(UniqueID::FromRandom()); }                   \
+    template <typename V>                                                               \
+    static type FromBinary(const V &binary) {                                           \
+      return type(binary);                                                              \
+    }                                                                                   \
+    template <typename V>                                                               \
+    static type FromHex(const V &hex) {                                                 \
+      return type(UniqueID::FromHex(hex));                                              \
+    }                                                                                   \
+    static type Nil() { return type(UniqueID::Nil()); }                                 \
+    static constexpr size_t Size() { return kUniqueIDSize; }                            \
+                                                                                        \
+   private:                                                                             \
+    template <typename V>                                                               \
+    explicit type(const V &binary) {                                                    \
+      RAY_CHECK(binary.size() == Size() || binary.size() == 0)                          \
+          << "expected size is " << Size() << ", but got data "                         \
+          << std::string(binary.begin(), binary.end()) << " of size " << binary.size(); \
+      std::memcpy(&id_, &binary.front(), binary.size());                                \
+    }                                                                                   \
   };
 
 #include "ray/common/id_def.h"

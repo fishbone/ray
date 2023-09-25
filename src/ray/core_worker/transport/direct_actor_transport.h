@@ -44,6 +44,7 @@
 #include "ray/core_worker/transport/thread_pool.h"
 #include "ray/rpc/grpc_server.h"
 #include "ray/rpc/worker/core_worker_client.h"
+#include "src/ray/capnp/ray_task.capnp.h"
 
 namespace ray {
 namespace core {
@@ -88,6 +89,10 @@ class CoreWorkerDirectTaskReceiver {
   /// \param[in] send_reply_callback The callback to be called when the request is done.
   void HandleTask(const rpc::PushTaskRequest &request,
                   rpc::PushTaskReply *reply,
+                  rpc::SendReplyCallback send_reply_callback);
+
+  void HandleTask(capnp::core_worker::PushTaskRequest::Reader request,
+                  capnp::core_worker::PushTaskReply::Builder reply,
                   rpc::SendReplyCallback send_reply_callback);
 
   /// Pop tasks from the queue and execute them sequentially

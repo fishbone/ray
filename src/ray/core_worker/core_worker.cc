@@ -3063,16 +3063,82 @@ Status CoreWorker::GetAndPinArgsForExecutor(const TaskSpecification &task,
   return Status::OK();
 }
 
-::kj::Promise<void> CoreWorker::pushTask(PushTaskContext context) {
+kj::Promise<void> CoreWorker::pushTask(PushTaskContext context) {
   auto request = context.getParams().getRequest();
-  auto task_id = request.getTaskSpec().getTaskId();
-  RAY_LOG(DEBUG) << "Received Handle Push Task "
-                 << TaskID::FromBinary(task_id);
-  // if (HandleWrongRecipient(WorkerID::FromBinary(request.getIntendedWorkerId()),
-  //                          send_reply_callback)) {
-  //   return;
-  // }
-  return ::kj::READY_NOW;
+  auto result = context.initResults();
+  auto task_spec = request.getTaskSpec();
+  auto task_id = task_spec.getTaskId();
+  RAY_LOG(DEBUG) << "Received Handle Push Task " << TaskID::FromBinary(task_id);
+  auto [promise, fulfiller] = kj::newPromiseAndFulfiller<void>();
+
+  rpc::SendReplyCallback send_reply_callback =
+      [this,
+       ret_status = result.initStatus(),
+       fulfiller = std::make_shared<decltype(fulfiller)>(kj::mv(fulfiller))](
+          const ray::Status &status,
+          std::function<void()> success,
+          std::function<void()> failure) mutable {
+        ret_status.setCode(static_cast<int>(status.code()));
+        ret_status.setMsg(status.message());
+        ret_status.setRpcCode(status.rpc_code());
+        (*fulfiller)->fulfill();
+      };
+
+  if (HandleWrongRecipient(WorkerID::FromBinary(request.getIntendedWorkerId()),
+                           std::move(send_reply_callback))) {
+    return kj::mv(promise);
+  }
+
+  rpc::JobConfig job_config;
+  if (task_spec.hasJobConfig()) {
+    job_config = MakeProtobuf<rpc::JobConfig>(task_spec.getJobConfig());
+  }
+
+  auto task_type = static_cast<TaskType>(task_spec.getType());
+  if (task_type == TaskType::ACTOR_CREATION_TASK || task_type == TaskType::NORMAL_TASK) {
+    auto job_id = JobID::FromBinary(task_spec.getJobId());
+    worker_context_.MaybeInitializeJobInfo(job_id, job_config);
+    task_counter_.SetJobId(job_id);
+  }
+
+  // Increment the task_queue_length and per function counter.
+  // task_queue_length_ += 1;
+
+  // For actor tasks, we just need to post a HandleActorTask instance to the task
+  // execution service.
+  auto reply = result.initReply();
+  if (task_type == TaskType::ACTOR_TASK) {
+    task_execution_service_.post(
+        [this,
+         request,
+         reply,
+         send_reply_callback = std::move(send_reply_callback)]() mutable {
+          // We have posted an exit task onto the main event loop,
+          // so shouldn't bother executing any further work.
+          if (IsExiting()) {
+            send_reply_callback(Status::Invalid("Worker is exiting."), nullptr, nullptr);
+            return;
+          }
+          direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
+        },
+        "CoreWorker.HandlePushTaskActor");
+  } else {
+    // Normal tasks are enqueued here, and we post a RunNormalTasksFromQueue instance to
+    // the task execution service.
+    direct_task_receiver_->HandleTask(request, reply, send_reply_callback);
+    task_execution_service_.post(
+        [this, send_reply_callback = std::move(send_reply_callback)]() mutable {
+          // We have posted an exit task onto the main event loop,
+          // so shouldn't bother executing any further work.
+          if (IsExiting()) {
+            send_reply_callback(Status::Invalid("Worker is exiting."), nullptr, nullptr);
+            return;
+          }
+          direct_task_receiver_->RunNormalTasksFromQueue();
+        },
+        "CoreWorker.HandlePushTask");
+  }
+  return kj::mv(promise);
 }
 
 void CoreWorker::HandlePushTask(rpc::PushTaskRequest request,

@@ -36,7 +36,6 @@
 #include "ray/core_worker/transport/direct_actor_transport.h"
 #include "ray/core_worker/transport/direct_task_transport.h"
 #include "ray/gcs/gcs_client/gcs_client.h"
-#include "src/ray/capnp/ray_task.capnp.h"
 #include "ray/pubsub/publisher.h"
 #include "ray/pubsub/subscriber.h"
 #include "ray/raylet_client/raylet_client.h"
@@ -44,6 +43,7 @@
 #include "ray/rpc/worker/core_worker_client.h"
 #include "ray/rpc/worker/core_worker_server.h"
 #include "ray/util/process.h"
+#include "src/ray/capnp/ray_task.capnp.h"
 #include "src/ray/protobuf/pubsub.pb.h"
 
 /// The set of gRPC handlers and their associated level of concurrency. If you want to
