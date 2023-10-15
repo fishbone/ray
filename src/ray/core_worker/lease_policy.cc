@@ -19,7 +19,7 @@ namespace core {
 
 std::pair<rpc::Address, bool> LocalityAwareLeasePolicy::GetBestNodeForTask(
     const TaskSpecification &spec) {
-  if (spec.GetMessage().scheduling_strategy().scheduling_strategy_case() ==
+  if (spec.GetSchedulingStrategyCase() ==
       rpc::SchedulingStrategy::SchedulingStrategyCase::kSpreadSchedulingStrategy) {
     // The explicit spread scheduling strategy
     // has higher priority than locality aware scheduling.

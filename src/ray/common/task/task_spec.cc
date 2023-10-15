@@ -159,6 +159,11 @@ TaskID TaskSpecification::ParentTaskId() const {
   return TaskID::FromBinary(message_->parent_task_id());
 }
 
+rpc::SchedulingStrategy::SchedulingStrategyCase TaskSpecification::GetSchedulingStrategyCase() const {
+  return message_->scheduling_strategy().scheduling_strategy_case();
+}
+
+
 TaskID TaskSpecification::SubmitterTaskId() const {
   if (message_->submitter_task_id().empty() /* e.g., empty proto default */) {
     return TaskID::Nil();

@@ -289,6 +289,8 @@ class TaskSpecification {
 
   size_t ParentCounter() const;
 
+  rpc::SchedulingStrategy::SchedulingStrategyCase GetSchedulingStrategyCase() const;
+
   ray::FunctionDescriptor FunctionDescriptor() const;
 
   [[nodiscard]] rpc::RuntimeEnvInfo RuntimeEnvInfo() const;

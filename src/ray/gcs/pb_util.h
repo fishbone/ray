@@ -103,8 +103,7 @@ inline std::shared_ptr<ray::rpc::ActorTableData> CreateActorTableData(
   // Set the fields that change when the actor is restarted.
   actor_info_ptr->set_num_restarts(num_restarts);
   actor_info_ptr->mutable_address()->CopyFrom(address);
-  actor_info_ptr->mutable_owner_address()->CopyFrom(
-      task_spec.GetMessage().caller_address());
+  actor_info_ptr->mutable_owner_address()->CopyFrom(task_spec.CallerAddress());
   actor_info_ptr->set_state(state);
   return actor_info_ptr;
 }
