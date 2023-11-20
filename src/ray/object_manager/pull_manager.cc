@@ -459,6 +459,7 @@ void PullManager::TryToMakeObjectLocal(const ObjectID &object_id) {
   // Try to pull the object from a remote node. If the object is spilled on the local
   // disk of the remote node, it will be restored by PushManager prior to pushing.
   bool did_pull = PullFromRandomLocation(object_id);
+  RAY_LOG(INFO) << "DBGGG: " << did_pull;
   if (did_pull) {
     UpdateRetryTimer(request, object_id);
     return;
@@ -467,11 +468,15 @@ void PullManager::TryToMakeObjectLocal(const ObjectID &object_id) {
   // check if we can restore the object directly in the current raylet.
   // first check local spilled objects
   std::string direct_restore_url = get_locally_spilled_object_url_(object_id);
+  RAY_LOG(INFO) << "DBGGG: " << object_id << "\t" << direct_restore_url;
   if (direct_restore_url.empty()) {
     if (!request.spilled_url.empty() && request.spilled_node_id.IsNil()) {
       direct_restore_url = request.spilled_url;
     }
   }
+
+  RAY_LOG(INFO) << "DBGGG2: " << object_id << "\t" << direct_restore_url;
+
   if (!direct_restore_url.empty()) {
     // Select an url from the object directory update
     UpdateRetryTimer(request, object_id);
