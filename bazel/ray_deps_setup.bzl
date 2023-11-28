@@ -381,3 +381,19 @@ def ray_deps_setup():
         sha256 = "2db82d1e7119df3e71b7640219b6dfe84789bc0537983c3b7ac4f7189aecfeaa",
         strip_prefix = "jemalloc-5.3.0",
      )
+
+    http_archive(
+        name = "libzmq",
+        urls = ["https://github.com/zeromq/libzmq/releases/download/v4.3.5/zeromq-4.3.5.tar.gz"],
+        build_file = "@com_github_ray_project_ray//bazel:BUILD.libzmq",
+        sha256 = "6653ef5910f17954861fe72332e68b03ca6e4d9c7160eb3a8de5a5a913bfab43",
+        strip_prefix = "zeromq-4.3.5",
+     )
+
+    new_git_repository(
+        name = "libazmq",
+        commit = "2c1adac46bced4eb74ed9be7c74563bb113eaacf",
+        remote = "https://github.com/zeromq/azmq.git",
+        build_file = "@com_github_ray_project_ray//bazel:BUILD.libazmq",
+        shallow_since = "1679571197 +1000",
+     )
